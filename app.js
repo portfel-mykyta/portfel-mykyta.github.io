@@ -15,7 +15,8 @@
   var SRC = (LOCAL && new URLSearchParams(location.search).get('src')) || DATA_URL;
   var K = {
     key: 'portfel.key', theme: 'portfel.theme', privacy: 'portfel.privacy', period: 'portfel.period', gperiod: 'portfel.growthPeriod',
-    drawn: 'portfel.drawn', ios: 'portfel.iosHintClosed', snap: 'portfel.snapshotHintClosed'
+    drawn: 'portfel.drawn', ios: 'portfel.iosHintClosed', snap: 'portfel.snapshotHintClosed',
+    planAmt: 'portfel.planAmount', planCap: 'portfel.planCap'
   };
 
   // Частки компаній в S&P 500 (Slickcharts, 27.10.2026). GOOGL і GOOG разом: це одна компанія.
@@ -471,6 +472,7 @@
     renderHoldings(m);
     renderFacts(m);
     renderInside(m);
+    renderPlan(m);
     renderGrowth(m);
     renderOps(m);
     renderAbout(m);
@@ -539,7 +541,7 @@
       $('gainAbs').textContent = usd(Math.abs(L.gain));
       $('gainPct').textContent = pct(ok(L.pct) ? Math.abs(L.pct) : null);
       $('gainLabel').replaceChildren.apply($('gainLabel'), L.full
-        ? [(gain ? 'заробіток' : 'збиток') + ' за весь час на вкладених ', money(usd(L.put))]
+        ? [(gain ? 'заробіток' : 'збиток') + ' за весь час, своїх грошей вкладено ', money(usd(L.put))]
         : [(gain ? 'заробіток' : 'збиток') + ' з ' + dayLongY(L.since)]);
       pill.setAttribute('aria-label', (gain ? 'Заробіток ' : 'Збиток ') + usd(Math.abs(L.gain)) + (L.full ? ' за весь час' : ' з ' + dayLongY(L.since)));
     }
@@ -702,12 +704,19 @@
     if (m.other > 0.004) list.append(cashItem(m));
     if (m.rows.length > 1 && m.cost > 0) list.append(totalItem(m));
   }
+  // Ціна покупки теперішніх паперів більша за вкладені власні гроші, коли туди пішли вже зароблені
+  // (продажі з прибутком, дивіденди): показуємо обидві частини, щоб цифри не здавалися суперечливими
+  function costNote(m) {
+    var L = m.life, extra = L && L.full ? m.cost - L.put : 0;
+    if (extra > 0.005) return ['куплено за ', money(usd(m.cost)), ': ', money(usd(L.put)), ' твоїх і ', money(usd(extra)), ' з уже заробленого'];
+    return ['куплено за ', money(usd(m.cost))];
+  }
   // Підсумок по паперах, які є зараз: скільки за них заплачено й скільки вони дали понад це
   function totalItem(m) {
     var up = m.pnl >= 0;
     var row = h('div', { class: 'pos-row' },
       h('i'),
-      h('span', { class: 'pos-name' }, h('b', { text: 'Разом у паперах' }), h('small', null, 'куплено за ', money(usd(m.cost)))),
+      h('span', { class: 'pos-name' }, h('b', { text: 'Разом у паперах' }), h('small', null, costNote(m))),
       h('span', { class: 'pos-val' }, money(usd(m.invested)), h('small', { text: pct(m.nav ? m.invested / m.nav : null) })),
       h('span', { class: 'pos-pnl ' + (up ? 'up' : 'down') }, money(usdS(m.pnl)), h('small', { text: pctS(m.pnl / m.cost) })));
     return h('li', { class: 'pos total' }, row);
@@ -1066,6 +1075,101 @@
       text: [m.taxYtd ? 'Після податку США лишилось ' + usd(net) + '. ' : '', 'В Україні з них ще треба сплатити 9% ПДФО і 5% військового збору.']
     };
   }
+
+  /* ---------- План поповнення: куди класти нові гроші, щоб жодна акція не перевищила межу ---------- */
+  // Комісії з твоїх угод: VUAA на Лондонській біржі мінімум близько $1.70, американські фонди до 1% суми
+  var VUAA_MIN_FEE = 1.7;
+  var PLAN_CAPS = [0.05, 0.1, 0.15, 0.2, 0.25];
+
+  function planModel(m, amount, cap) {
+    var funds = m.rows.filter(function (r) { return TRACKERS[r.sym]; });
+    var F = sum(funds, function (r) { return r.value; });
+    var nav = m.nav, T = nav + amount;
+    // Частка акції разом із тим, що від неї лежить у фондах; нові гроші йдуть у фонд
+    var stocks = m.rows.filter(function (r) { return !r.fund; }).map(function (r) {
+      var w = SP500[r.sym] || 0;
+      var now = (r.value + w * F) / nav;
+      var after = (r.value + w * (F + amount)) / T;
+      var need = cap > w ? Math.max(0, (r.value + w * F - cap * nav) / (cap - w)) : Infinity;
+      return { sym: r.sym, name: r.name, w: w, now: now, after: after, need: need, slot: r.slot };
+    }).sort(function (a, b) { return b.now - a.now; });
+    var over = stocks.filter(function (s) { return s.after > cap + 1e-9; });
+    var needAll = stocks.reduce(function (x, s) { return Math.max(x, s.need); }, 0);
+    // Фонд: якщо мінімальна комісія VUAA більша за 1% суми, дешевше VOO
+    var fund = amount * 0.01 < VUAA_MIN_FEE ? 'VOO' : 'VUAA';
+    return { amount: amount, cap: cap, stocks: stocks, over: over, needAll: needAll, fund: fund, vuaaPct: VUAA_MIN_FEE / amount };
+  }
+
+  function renderPlan(m) {
+    var sec = $('plan');
+    var hasStocks = m.rows.some(function (r) { return !r.fund; });
+    sec.hidden = !hasStocks || !(m.nav > 0);
+    if (sec.hidden) return;
+    var amtEl = $('planAmt');
+    var amount = Number(store.get(K.planAmt)) || 50;
+    var cap = Number(store.get(K.planCap)) || 0.1;
+    if (PLAN_CAPS.indexOf(cap) < 0) cap = 0.1;
+    if (document.activeElement !== amtEl) amtEl.value = String(amount);
+    amtEl.oninput = function () {
+      var v = Number(String(amtEl.value).replace(',', '.'));
+      if (v > 0 && v < 1e7) { store.set(K.planAmt, String(v)); drawPlan(m); }
+    };
+    var chips = $('planCaps');
+    chips.replaceChildren();
+    PLAN_CAPS.forEach(function (c) {
+      chips.append(h('button', {
+        type: 'button', role: 'radio', 'aria-checked': String(c === cap), text: pct(c, 0),
+        onclick: function () { store.set(K.planCap, String(c)); renderPlan(state.m); }
+      }));
+    });
+    drawPlan(m);
+  }
+
+  function drawPlan(m) {
+    var amount = Number(store.get(K.planAmt)) || 50;
+    var cap = Number(store.get(K.planCap)) || 0.1;
+    var P = planModel(m, amount, cap);
+    var out = $('planOut');
+    out.replaceChildren();
+
+    // Що купити
+    var fundNote = P.fund === 'VOO'
+      ? 'Комісія менше 1% суми. VUAA на цій сумі обійдеться дорожче: мінімум близько $1.70, тобто ' + pct(P.vuaaPct) + '.'
+      : 'Комісія близько $1.70, це ' + pct(P.vuaaPct) + ' суми. VUAA накопичувальний: дивіденди лишаються у фонді, тож не треба щороку декларувати їх в Україні.';
+    out.append(h('div', { class: 'plan-buy' },
+      h('p', { class: 'plan-what' }, 'Купи ', h('b', { text: P.fund }), ' на ', money(usd(amount))),
+      h('p', { class: 'plan-why' }, P.over.length
+        ? 'Фонд, а не акції: ' + listNames(P.over.map(function (s) { return s.name; })) + ' вище межі ' + pct(cap, 0) + '. ' + fundNote
+        : 'Усі акції в межах ' + pct(cap, 0) + '. Фонд додає різноманітності; акції можна докупити, але не вище межі. ' + fundNote)));
+
+    // Що буде з частками
+    var ul = h('ul', { class: 'plan-list' });
+    P.stocks.forEach(function (s) {
+      var dot = h('i', { class: 'pdot' }); dot.style.background = colorOf(s.slot);
+      var okNow = s.after <= cap + 1e-9;
+      var status;
+      if (okNow) status = h('span', { class: 'plan-ok' }, icon('i-check'), 'у межах');
+      else if (!isFinite(s.need)) status = h('span', { class: 'plan-far' }, 'у ринку ' + s.name + ' вже займає ' + pct(s.w) + ', тож межу нижчу за це лише фондами не досягти');
+      else status = h('span', { class: 'plan-far' }, 'до межі ще ', money(usd(Math.max(0, s.need - amount))), ' у фонд');
+      ul.append(h('li', null,
+        h('span', { class: 'plan-name' }, dot, h('b', { text: s.name })),
+        h('span', { class: 'plan-shares' }, pct(s.now) + ' ', icon('i-next', 'plan-arrow'), ' ' + pct(s.after)),
+        status));
+    });
+    out.append(ul);
+
+    // Скільки ще таких поповнень
+    var rest = P.needAll - amount;
+    if (isFinite(P.needAll) && rest > 0.5) {
+      var n = Math.ceil(rest / amount);
+      out.append(h('p', { class: 'plan-sum' }, 'Щоб усі акції опустилися до ' + pct(cap, 0) + ' без продажів, у фонди треба вкласти ще ',
+        money(usd(rest)), n === 1 ? ': вистачить наступного поповнення.'
+          : [': приблизно ' + n + ' ' + plural(n, ['таке поповнення', 'такі поповнення', 'таких поповнень']) + ' по ', money(usd(amount)), '.']));
+    } else if (isFinite(P.needAll)) {
+      out.append(h('p', { class: 'plan-sum' }, 'Після цього поповнення всі акції будуть у межах ' + pct(cap, 0) + '.'));
+    }
+  }
+  function listNames(xs) { return xs.length > 1 ? xs.slice(0, -1).join(', ') + ' і ' + xs[xs.length - 1] : xs[0]; }
 
   /* ---------- Розвиток портфеля: вартість активів на кожному закритті ---------- */
   var GPERIODS = [

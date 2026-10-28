@@ -472,6 +472,33 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 #insideTable tr.grp th { text-align: left; padding: 14px 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
 #insideTable tbody tr.grp:first-child th { padding-top: 2px; }
 
+/* ---------- План поповнення ---------- */
+.plan { grid-column: 1 / -1; }
+.plan-body { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: 18px 40px; align-items: start; }
+.plan-in { display: grid; gap: 16px; }
+.plan-amt input { font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
+.plan-cap { display: grid; gap: 6px; }
+.plan-label { font-size: 13px; color: var(--ink-2); }
+.plan-cap .chips { justify-self: start; }
+.plan-out { display: grid; gap: 14px; min-width: 0; }
+.plan-buy { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--accent-soft); }
+.plan-what { font-size: 22px; font-weight: 600; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60; }
+.plan-what b { color: var(--accent); font-weight: 650; }
+.plan-why { font-size: 14px; color: var(--ink-2); }
+.plan-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.plan-list li { display: grid; grid-template-columns: minmax(6rem, 9rem) auto minmax(0, 1fr); align-items: center; gap: 4px 16px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.plan-list li:first-child { border-top: 0; }
+.plan-name { display: inline-flex; align-items: center; gap: 8px; }
+.plan-name b { font-weight: 600; }
+.plan-shares { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-arrow { width: 15px; height: 15px; color: var(--muted); }
+.plan-ok { display: inline-flex; align-items: center; gap: 5px; color: var(--up); font-weight: 500; }
+.plan-ok .ic { width: 16px; height: 16px; }
+.plan-far { color: var(--ink-2); }
+.plan-far .money { color: var(--ink); font-weight: 600; }
+.plan-sum { font-size: 14px; color: var(--ink-2); }
+.plan-sum .money { color: var(--ink); font-weight: 600; }
+
 /* ---------- Розвиток портфеля ---------- */
 .growth { grid-column: 1 / -1; }
 .growth-title { display: grid; gap: 2px; }
@@ -595,6 +622,7 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 @media (max-width: 899px) {
   .hero, .market, .ops, .learn { grid-column: 1 / -1; }
   .inside-body { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .plan-body { grid-template-columns: minmax(0, 1fr); }
   .growth-body { grid-template-columns: minmax(0, 1fr); }
   .growth-main { display: contents; }
   .gchart { height: 240px; order: 1; }
@@ -622,6 +650,9 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .lt-row { grid-template-columns: minmax(5.4rem, 7.4rem) minmax(0, 1fr) 4.4rem; column-gap: 10px; padding: 7px 2px; }
   .lt-name { font-size: 13.5px; }
   .legend { gap: 6px 12px; font-size: 12.5px; }
+  .plan-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .plan-list li > :last-child { grid-column: 1 / -1; font-size: 13px; }
+  .plan-what { font-size: 20px; }
   .spark { min-height: 80px; }
   .hero-num { font-size: clamp(46px, 14vw, 60px); }
   .panel-head { gap: 10px; }

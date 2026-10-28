@@ -185,6 +185,23 @@
       <p class="note" id="insideNote"></p>
     </section>
 
+    <section class="panel plan" id="plan" aria-labelledby="planTitle" hidden>
+      <div class="panel-head">
+        <div class="head-title">
+          <h2 id="planTitle">План поповнення</h2>
+          <p class="panel-meta">Куди класти нові гроші, щоб жодна акція не займала більше за твою межу. Без продажів.</p>
+        </div>
+      </div>
+      <div class="plan-body">
+        <div class="plan-in">
+          <label class="field plan-amt"><span>Сума поповнення, $</span><input id="planAmt" type="number" inputmode="decimal" min="1" step="1"></label>
+          <div class="plan-cap"><span class="plan-label" id="planCapLabel">Межа для однієї акції</span><div class="chips" id="planCaps" role="radiogroup" aria-labelledby="planCapLabel"></div></div>
+        </div>
+        <div class="plan-out" id="planOut" aria-live="polite"></div>
+      </div>
+      <p class="note">Частки враховують і те, що лежить у фондах. Комісії приблизні, за твоїми угодами. Це арифметика за твоїм правилом, а не інвестиційна порада.</p>
+    </section>
+
     <section class="panel growth" id="growth" aria-labelledby="growthTitle">
       <div class="panel-head">
         <div class="growth-title">
