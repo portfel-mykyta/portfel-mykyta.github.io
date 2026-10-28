@@ -1,0 +1,42 @@
+name: Тимчасова перевірка доступу до IBKR (буде видалена)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: CORS і OAuth на api.ibkr.com
+        run: |
+          set +e
+          O='https://portfel-mykyta.github.io'
+          H='authorization,content-type,mcp-protocol-version,mcp-session-id'
+          for url in https://api.ibkr.com/v1/api/mcp-public https://api.ibkr.com/oauth2/register https://api.ibkr.com/oauth2/api/v1/token; do
+            for org in "$O" https://claude.ai; do
+              echo "===== OPTIONS $url  Origin: $org"
+              curl -sS -i -m 20 -X OPTIONS "$url" -H "Origin: $org" -H 'Access-Control-Request-Method: POST' -H "Access-Control-Request-Headers: $H" | head -30
+              echo
+            done
+          done
+          echo "===== POST initialize без токена"
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/v1/api/mcp-public -H "Origin: $O" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' | head -30
+          echo
+          echo "===== protected resource metadata"
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource/v1/api/mcp-public -H "Origin: $O" | head -40
+          echo
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource -H "Origin: $O" | head -40
+          echo
+          echo "===== authorization server metadata"
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-authorization-server -H "Origin: $O" | head -80
+          echo
+          echo "===== POST register з порожнім тілом (нічого не створює)"
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/register -H "Origin: $O" -H 'Content-Type: application/json' --data '{}' | head -30
+          echo
+          echo "===== POST token з вигаданим кодом (нічого не створює)"
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/api/v1/token -H "Origin: $O" -H 'Content-Type: application/x-www-form-urlencoded' --data 'grant_type=authorization_code&code=x&client_id=x&redirect_uri=https%3A%2F%2Fportfel-mykyta.github.io%2F&code_verifier=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' | head -30
+          true
