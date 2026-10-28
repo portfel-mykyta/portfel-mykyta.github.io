@@ -16,27 +16,48 @@ jobs:
           set +e
           O='https://portfel-mykyta.github.io'
           H='authorization,content-type,mcp-protocol-version,mcp-session-id'
+          # Результат кожної перевірки: рядок статусу, заголовки CORS і авторизації, початок тіла
+          note() {
+            local title="$1" file="$2"
+            local head body
+            head=$(grep -iE '^(HTTP/|access-control-|www-authenticate|location|content-type|mcp-)' "$file" | tr -d '\r')
+            body=$(awk 'BEGIN{b=0} /^\r?$/{b=1; next} b{print}' "$file" | tr -d '\r' | head -c 700)
+            local msg="$head"$'\n'"BODY: $body"
+            msg="${msg//'%'/'%25'}"; msg="${msg//$'\n'/'%0A'}"
+            echo "::notice title=$title::$msg"
+          }
+          i=0
           for url in https://api.ibkr.com/v1/api/mcp-public https://api.ibkr.com/oauth2/register https://api.ibkr.com/oauth2/api/v1/token; do
             for org in "$O" https://claude.ai; do
-              echo "===== OPTIONS $url  Origin: $org"
-              curl -sS -i -m 20 -X OPTIONS "$url" -H "Origin: $org" -H 'Access-Control-Request-Method: POST' -H "Access-Control-Request-Headers: $H" | head -30
-              echo
+              i=$((i+1))
+              curl -sS -i -m 20 -X OPTIONS "$url" -H "Origin: $org" -H 'Access-Control-Request-Method: POST' -H "Access-Control-Request-Headers: $H" > r$i.txt 2>&1
+              note "OPTIONS ${url#https://api.ibkr.com} from $org" r$i.txt
             done
           done
-          echo "===== POST initialize без токена"
-          curl -sS -i -m 20 -X POST https://api.ibkr.com/v1/api/mcp-public -H "Origin: $O" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' | head -30
-          echo
-          echo "===== protected resource metadata"
-          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource/v1/api/mcp-public -H "Origin: $O" | head -40
-          echo
-          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource -H "Origin: $O" | head -40
-          echo
-          echo "===== authorization server metadata"
-          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-authorization-server -H "Origin: $O" | head -80
-          echo
-          echo "===== POST register з порожнім тілом (нічого не створює)"
-          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/register -H "Origin: $O" -H 'Content-Type: application/json' --data '{}' | head -30
-          echo
-          echo "===== POST token з вигаданим кодом (нічого не створює)"
-          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/api/v1/token -H "Origin: $O" -H 'Content-Type: application/x-www-form-urlencoded' --data 'grant_type=authorization_code&code=x&client_id=x&redirect_uri=https%3A%2F%2Fportfel-mykyta.github.io%2F&code_verifier=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' | head -30
+          true
+      - name: Запити без токена
+        run: |
+          set +e
+          O='https://portfel-mykyta.github.io'
+          note() {
+            local title="$1" file="$2"
+            local head body
+            head=$(grep -iE '^(HTTP/|access-control-|www-authenticate|location|content-type|mcp-)' "$file" | tr -d '\r')
+            body=$(awk 'BEGIN{b=0} /^\r?$/{b=1; next} b{print}' "$file" | tr -d '\r' | head -c 700)
+            local msg="$head"$'\n'"BODY: $body"
+            msg="${msg//'%'/'%25'}"; msg="${msg//$'\n'/'%0A'}"
+            echo "::notice title=$title::$msg"
+          }
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/v1/api/mcp-public -H "Origin: $O" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' > p1.txt 2>&1
+          note "POST mcp initialize no token" p1.txt
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource/v1/api/mcp-public -H "Origin: $O" > p2.txt 2>&1
+          note "GET PRM /v1/api/mcp-public" p2.txt
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-protected-resource -H "Origin: $O" > p3.txt 2>&1
+          note "GET PRM root" p3.txt
+          curl -sS -i -m 20 https://api.ibkr.com/.well-known/oauth-authorization-server -H "Origin: $O" > p4.txt 2>&1
+          note "GET AS metadata" p4.txt
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/register -H "Origin: $O" -H 'Content-Type: application/json' --data '{}' > p5.txt 2>&1
+          note "POST register empty (creates nothing)" p5.txt
+          curl -sS -i -m 20 -X POST https://api.ibkr.com/oauth2/api/v1/token -H "Origin: $O" -H 'Content-Type: application/x-www-form-urlencoded' --data 'grant_type=authorization_code&code=x&client_id=x&redirect_uri=https%3A%2F%2Fportfel-mykyta.github.io%2F&code_verifier=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > p6.txt 2>&1
+          note "POST token fake code (creates nothing)" p6.txt
           true
