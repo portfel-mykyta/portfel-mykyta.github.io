@@ -4,7 +4,7 @@
    варіант. Тож нова версія приходить з першим відкриттям, номери версій піднімати
    не треба. */
 
-var CACHE = 'portfel-v2';
+var CACHE = 'portfel-v3';
 var DATA_HOST = 'raw.githubusercontent.com';
 var DATA_PATH = '/portfel-mykyta/portfel-mykyta.github.io/data/';
 
@@ -12,6 +12,7 @@ var SHELL = [
   './',
   './app.css',
   './app.js',
+  './plan-core.js',
   './boot.js',
   './manifest.webmanifest',
   './icon.svg',

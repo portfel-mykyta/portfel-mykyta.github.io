@@ -16,17 +16,14 @@
   var K = {
     key: 'portfel.key', theme: 'portfel.theme', privacy: 'portfel.privacy', period: 'portfel.period', gperiod: 'portfel.growthPeriod',
     drawn: 'portfel.drawn', ios: 'portfel.iosHintClosed', snap: 'portfel.snapshotHintClosed',
-    planAmt: 'portfel.planAmount', planCap: 'portfel.planCap'
+    planAmt: 'portfel.planAmount', planCap: 'portfel.planCap', planBonds: 'portfel.planBonds'
   };
+  // Сторінка «Купівля» в Claude: створює заявки в IBKR через конектор, відправляє їх власник
+  var KUPIVLIA_URL = 'https://claude.ai/artifact/97fMDc1ZngDwhjdcGPJAss';
+  var PP = window.PortfelPlan;
 
-  // Частки компаній в S&P 500 (Slickcharts, 27.10.2026). GOOGL і GOOG разом: це одна компанія.
-  var SP500 = {
-    NVDA: 0.075, AAPL: 0.0714, MSFT: 0.0561, AMZN: 0.0385, GOOGL: 0.0553, GOOG: 0.0553, AVGO: 0.023,
-    META: 0.023, TSLA: 0.0224, 'BRK.B': 0.0167, LLY: 0.0163, MU: 0.0149, WMT: 0.0136, JPM: 0.0127,
-    AMD: 0.0126, V: 0.0108, XOM: 0.0108, JNJ: 0.0092, MA: 0.0076, ABBV: 0.0072, INTC: 0.0069,
-    PLTR: 0.0068, CVX: 0.0065, COST: 0.0063, CSCO: 0.0062, KO: 0.0057, ORCL: 0.0055, PG: 0.0053,
-    UNH: 0.0053, BAC: 0.005
-  };
+  // Частки компаній в S&P 500 і списки фондів: спільні з «Купівлею», у plan-core.js
+  var SP500 = PP.SP500;
   // Сектори S&P 500 (класифікація GICS): оцінка ChartRow за складом фонду SPY на закриття 26.10.2026.
   var SECTORS = [
     { id: 'it', name: 'Технології', w: 0.384, eg: 'Apple, Nvidia, Microsoft' },
@@ -50,8 +47,9 @@
     XOM: 'energy', CVX: 'energy', ZIM: 'ind', LMT: 'ind', RTX: 'ind', NOC: 'ind', GD: 'ind'
   };
   var WEIGHTS_NOTE = 'Частки компаній у S&P 500: Slickcharts, 27 жовтня 2026. Сектори: оцінка ChartRow за складом фонду SPY, 26 жовтня 2026.';
-  // Фонди, що повторюють S&P 500: через них ти теж володієш Apple, Tesla тощо.
-  var TRACKERS ={ VOO: 1, VUAA: 1, VUSA: 1, CSPX: 1, SXR8: 1, IVV: 1, SPY: 1, SPLG: 1, SPYM: 1, IUSA: 1, SPYL: 1, SPX5: 1, I500: 1 };
+  // Фонди, що повторюють S&P 500 (через них ти теж володієш Apple, Tesla тощо), і фонди облігацій
+  var TRACKERS = PP.TRACKERS;
+  var BONDS = PP.BONDS;
   var NAMES = {
     AAPL: 'Apple', TSLA: 'Tesla', MSFT: 'Microsoft', NVDA: 'Nvidia', AMZN: 'Amazon', GOOGL: 'Alphabet',
     GOOG: 'Alphabet', META: 'Meta', AVGO: 'Broadcom', 'BRK.B': 'Berkshire Hathaway', LLY: 'Eli Lilly',
@@ -728,8 +726,9 @@
     if (!m.nav) return null;
     var funds = m.rows.filter(function (r) { return TRACKERS[r.sym]; });
     var stocks = m.rows.filter(function (r) { return !TRACKERS[r.sym] && !r.fund; });
-    var others = m.rows.filter(function (r) { return !TRACKERS[r.sym] && r.fund; });
-    var src = funds.concat(stocks).map(function (r) { return { key: r.sym, label: r.title, color: colorOf(r.slot) }; });
+    var bonds = m.rows.filter(function (r) { return BONDS[r.sym]; });
+    var others = m.rows.filter(function (r) { return !TRACKERS[r.sym] && !BONDS[r.sym] && r.fund; });
+    var src = funds.concat(stocks, bonds).map(function (r) { return { key: r.sym, label: r.title, color: colorOf(r.slot) }; });
     var F = sum(funds, function (r) { return r.value; });
 
     var co = {};
@@ -749,6 +748,8 @@
     var sec = {};
     SECTORS.forEach(function (s) { sec[s.id] = { key: s.id, name: s.name, w: s.w, eg: s.eg, parts: {}, total: 0 }; });
     sec.other = { key: 'other', name: 'Інше', w: 0, eg: '', parts: {}, total: 0 };
+    sec.bonds = { key: 'bonds', name: 'Облігації', w: 0, eg: 'облігації через фонди, у S&P 500 їх немає', parts: {}, total: 0 };
+    bonds.forEach(function (b) { sec.bonds.parts[b.sym] = (sec.bonds.parts[b.sym] || 0) + b.value; sec.bonds.total += b.value; });
     funds.forEach(function (f) { SECTORS.forEach(function (s) { sec[s.id].parts[f.sym] = f.value * s.w; sec[s.id].total += f.value * s.w; }); });
     stocks.concat(others).forEach(function (s) {
       var t = sec[SECTOR_OF[s.sym]] || sec.other;
@@ -811,7 +812,7 @@
     }
     rowsOf('Компанії', cos);
     rowsOf('Сектори', L.sectors);
-    $('insideNote').textContent = 'Частка рахується від усього рахунку разом із грошима. VOO і VUAA повторюють S&P 500, тож склад у них однаковий. ' + WEIGHTS_NOTE;
+    $('insideNote').textContent = 'Частка рахується від усього рахунку разом із грошима. VOO і VUAA повторюють S&P 500, тож склад у них однаковий. Фонди облігацій показано окремим рядком. ' + WEIGHTS_NOTE;
   }
 
   // Горизонтальні смуги: частка в тебе (сегменти за джерелами) і риска частки в ринку
@@ -1076,100 +1077,100 @@
     };
   }
 
-  /* ---------- План поповнення: куди класти нові гроші, щоб жодна акція не перевищила межу ---------- */
-  // Комісії з твоїх угод: VUAA на Лондонській біржі мінімум близько $1.70, американські фонди до 1% суми
-  var VUAA_MIN_FEE = 1.7;
-  var PLAN_CAPS = [0.05, 0.1, 0.15, 0.2, 0.25];
-
-  function planModel(m, amount, cap) {
-    var funds = m.rows.filter(function (r) { return TRACKERS[r.sym]; });
-    var F = sum(funds, function (r) { return r.value; });
-    var nav = m.nav, T = nav + amount;
-    // Частка акції разом із тим, що від неї лежить у фондах; нові гроші йдуть у фонд
-    var stocks = m.rows.filter(function (r) { return !r.fund; }).map(function (r) {
-      var w = SP500[r.sym] || 0;
-      var now = (r.value + w * F) / nav;
-      var after = (r.value + w * (F + amount)) / T;
-      var need = cap > w ? Math.max(0, (r.value + w * F - cap * nav) / (cap - w)) : Infinity;
-      return { sym: r.sym, name: r.name, w: w, now: now, after: after, need: need, slot: r.slot };
-    }).sort(function (a, b) { return b.now - a.now; });
-    var over = stocks.filter(function (s) { return s.after > cap + 1e-9; });
-    var needAll = stocks.reduce(function (x, s) { return Math.max(x, s.need); }, 0);
-    // Фонд: якщо мінімальна комісія VUAA більша за 1% суми, дешевше VOO
-    var fund = amount * 0.01 < VUAA_MIN_FEE ? 'VOO' : 'VUAA';
-    return { amount: amount, cap: cap, stocks: stocks, over: over, needAll: needAll, fund: fund, vuaaPct: VUAA_MIN_FEE / amount };
+  /* ---------- План поповнення: куди класти нові гроші ---------- */
+  // Правило спільне зі сторінкою «Купівля» в Claude (plan-core.js): облігації до заданої частки,
+  // решта у фонд на S&P 500, тож окремі акції не ростуть понад межу і нічого не треба продавати
+  function planSettings() {
+    var amount = Number(store.get(K.planAmt)) || 50;
+    var cap = Number(store.get(K.planCap)) || 0.1;
+    var bonds = Number(store.get(K.planBonds)) || 0;
+    if (PP.CAPS.indexOf(cap) < 0) cap = 0.1;
+    if (PP.BOND_SHARES.indexOf(bonds) < 0) bonds = 0;
+    return { amount: amount, cap: cap, bonds: bonds };
+  }
+  function planModel(m, st) {
+    return PP.model({
+      nav: m.nav, cash: m.cash, amount: st.amount, cap: st.cap, bonds: st.bonds,
+      holdings: m.rows.map(function (r) { return { sym: r.sym, name: r.name, value: r.value, type: PP.typeOf(r.sym, r.fund) }; })
+    });
   }
 
   function renderPlan(m) {
     var sec = $('plan');
-    var hasStocks = m.rows.some(function (r) { return !r.fund; });
-    sec.hidden = !hasStocks || !(m.nav > 0);
+    sec.hidden = !(m.nav > 0);
     if (sec.hidden) return;
+    var st = planSettings();
     var amtEl = $('planAmt');
-    var amount = Number(store.get(K.planAmt)) || 50;
-    var cap = Number(store.get(K.planCap)) || 0.1;
-    if (PLAN_CAPS.indexOf(cap) < 0) cap = 0.1;
-    if (document.activeElement !== amtEl) amtEl.value = String(amount);
+    if (document.activeElement !== amtEl) amtEl.value = String(st.amount);
     amtEl.oninput = function () {
       var v = Number(String(amtEl.value).replace(',', '.'));
-      if (v > 0 && v < 1e7) { store.set(K.planAmt, String(v)); drawPlan(m); }
+      if (v > 0 && v < 1e7) { store.set(K.planAmt, String(Math.round(v * 100) / 100)); drawPlan(m); }
     };
-    var chips = $('planCaps');
-    chips.replaceChildren();
-    PLAN_CAPS.forEach(function (c) {
-      chips.append(h('button', {
-        type: 'button', role: 'radio', 'aria-checked': String(c === cap), text: pct(c, 0),
-        onclick: function () { store.set(K.planCap, String(c)); renderPlan(state.m); }
-      }));
-    });
+    function chipRow(box, values, cur, key, fmt) {
+      box.replaceChildren();
+      values.forEach(function (c) {
+        box.append(h('button', {
+          type: 'button', role: 'radio', 'aria-checked': String(c === cur), text: fmt(c),
+          onclick: function () { store.set(key, String(c)); renderPlan(state.m); }
+        }));
+      });
+    }
+    chipRow($('planCaps'), PP.CAPS, st.cap, K.planCap, function (c) { return pct(c, 0); });
+    chipRow($('planBonds'), PP.BOND_SHARES, st.bonds, K.planBonds, function (c) { return c ? pct(c, 0) : 'Без'; });
     drawPlan(m);
   }
 
   function drawPlan(m) {
-    var amount = Number(store.get(K.planAmt)) || 50;
-    var cap = Number(store.get(K.planCap)) || 0.1;
-    var P = planModel(m, amount, cap);
+    var st = planSettings();
+    var P = planModel(m, st);
     var out = $('planOut');
     out.replaceChildren();
+    if (!P.orders.length) return;
 
-    // Що купити
-    var fundNote = P.fund === 'VOO'
-      ? 'Комісія менше 1% суми. VUAA на цій сумі обійдеться дорожче: мінімум близько $1.70, тобто ' + pct(P.vuaaPct) + '.'
-      : 'Комісія близько $1.70, це ' + pct(P.vuaaPct) + ' суми. VUAA накопичувальний: дивіденди лишаються у фонді, тож не треба щороку декларувати їх в Україні.';
+    // Що купити: одна або дві покупки
+    var what = ['Купи '];
+    P.orders.forEach(function (o, i) {
+      if (i) what.push(' і ');
+      what.push(h('b', { text: o.sym }), ' на ', money(usd(o.amount)));
+    });
+    var why = PP.notes(P);
+
     out.append(h('div', { class: 'plan-buy' },
-      h('p', { class: 'plan-what' }, 'Купи ', h('b', { text: P.fund }), ' на ', money(usd(amount))),
-      h('p', { class: 'plan-why' }, P.over.length
-        ? 'Фонд, а не акції: ' + listNames(P.over.map(function (s) { return s.name; })) + ' вище межі ' + pct(cap, 0) + '. ' + fundNote
-        : 'Усі акції в межах ' + pct(cap, 0) + '. Фонд додає різноманітності; акції можна докупити, але не вище межі. ' + fundNote)));
+      h('p', { class: 'plan-what' }, what),
+      h('p', { class: 'plan-why', text: why.join(' ') }),
+      h('div', { class: 'plan-act' },
+        h('a', { class: 'btn primary', href: KUPIVLIA_URL + '#' + PP.toHash(st), target: '_blank', rel: 'noopener' }, 'Купити', icon('i-out')),
+        h('span', { class: 'plan-act-note', text: 'Відкриється «Купівля» в Claude: вона створить заявку в IBKR за поточними цінами, а відправиш її ти.' }))));
 
     // Що буде з частками
-    var ul = h('ul', { class: 'plan-list' });
-    P.stocks.forEach(function (s) {
-      var dot = h('i', { class: 'pdot' }); dot.style.background = colorOf(s.slot);
-      var okNow = s.after <= cap + 1e-9;
-      var status;
-      if (okNow) status = h('span', { class: 'plan-ok' }, icon('i-check'), 'у межах');
-      else if (!isFinite(s.need)) status = h('span', { class: 'plan-far' }, 'у ринку ' + s.name + ' вже займає ' + pct(s.w) + ', тож межу нижчу за це лише фондами не досягти');
-      else status = h('span', { class: 'plan-far' }, 'до межі ще ', money(usd(Math.max(0, s.need - amount))), ' у фонд');
-      ul.append(h('li', null,
-        h('span', { class: 'plan-name' }, dot, h('b', { text: s.name })),
-        h('span', { class: 'plan-shares' }, pct(s.now) + ' ', icon('i-next', 'plan-arrow'), ' ' + pct(s.after)),
-        status));
-    });
-    out.append(ul);
+    if (P.stocks.length) {
+      var ul = h('ul', { class: 'plan-list' });
+      var slots = {};
+      m.rows.forEach(function (r) { slots[r.sym] = r.slot; });
+      P.stocks.forEach(function (s) {
+        var dot = h('i', { class: 'pdot' }); dot.style.background = colorOf(slots[s.sym]);
+        var status;
+        if (!s.over) status = h('span', { class: 'plan-ok' }, icon('i-check'), 'у межах');
+        else if (!isFinite(s.need)) status = h('span', { class: 'plan-far' }, 'у ринку ' + s.name + ' вже займає ' + pct(s.w) + ', тож межу нижчу за це лише фондами не досягти');
+        else status = h('span', { class: 'plan-far' }, 'до межі треба вкласти ще ', money(usd(Math.max(0, s.need - st.amount))));
+        ul.append(h('li', null,
+          h('span', { class: 'plan-name' }, dot, h('b', { text: s.name })),
+          h('span', { class: 'plan-shares' }, pct(s.now) + ' ', icon('i-next', 'plan-arrow'), ' ' + pct(s.after)),
+          status));
+      });
+      out.append(ul);
+    }
 
     // Скільки ще таких поповнень
-    var rest = P.needAll - amount;
-    if (isFinite(P.needAll) && rest > 0.5) {
-      var n = Math.ceil(rest / amount);
-      out.append(h('p', { class: 'plan-sum' }, 'Щоб усі акції опустилися до ' + pct(cap, 0) + ' без продажів, у фонди треба вкласти ще ',
-        money(usd(rest)), n === 1 ? ': вистачить наступного поповнення.'
-          : [': приблизно ' + n + ' ' + plural(n, ['таке поповнення', 'такі поповнення', 'таких поповнень']) + ' по ', money(usd(amount)), '.']));
-    } else if (isFinite(P.needAll)) {
-      out.append(h('p', { class: 'plan-sum' }, 'Після цього поповнення всі акції будуть у межах ' + pct(cap, 0) + '.'));
+    if (isFinite(P.needAll) && P.rest > 0.5) {
+      var n = Math.ceil(P.rest / st.amount);
+      out.append(h('p', { class: 'plan-sum' }, 'Щоб усі акції опустилися до ' + pct(st.cap, 0) + ' без продажів, треба вкласти ще ',
+        money(usd(P.rest)), n === 1 ? ': вистачить наступного поповнення.'
+          : [': приблизно ' + n + ' ' + plural(n, ['таке поповнення', 'такі поповнення', 'таких поповнень']) + ' по ', money(usd(st.amount)), '.']));
+    } else if (isFinite(P.needAll) && P.stocks.length) {
+      out.append(h('p', { class: 'plan-sum' }, 'Після цього поповнення всі акції будуть у межах ' + pct(st.cap, 0) + '.'));
     }
   }
-  function listNames(xs) { return xs.length > 1 ? xs.slice(0, -1).join(', ') + ' і ' + xs[xs.length - 1] : xs[0]; }
 
   /* ---------- Розвиток портфеля: вартість активів на кожному закритті ---------- */
   var GPERIODS = [

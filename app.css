@@ -273,7 +273,7 @@ a { color: var(--accent); }
   padding: var(--pad); min-width: 0;
   display: grid; gap: 14px; align-content: start;
 }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-width: 0; }
 h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60; }
 .panel-meta { color: var(--muted); font-size: 13px; }
 .note { color: var(--muted); font-size: 13px; line-height: 1.5; }
@@ -485,6 +485,9 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .plan-what { font-size: 22px; font-weight: 600; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60; }
 .plan-what b { color: var(--accent); font-weight: 650; }
 .plan-why { font-size: 14px; color: var(--ink-2); }
+.plan-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; }
+.plan-act .btn .ic { width: 16px; height: 16px; }
+.plan-act-note { flex: 1 1 16rem; font-size: 13px; color: var(--ink-2); }
 .plan-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .plan-list li { display: grid; grid-template-columns: minmax(6rem, 9rem) auto minmax(0, 1fr); align-items: center; gap: 4px 16px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .plan-list li:first-child { border-top: 0; }
@@ -658,7 +661,7 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .panel-head { gap: 10px; }
   .market .chips, .growth .chips { width: 100%; }
   .market .chips button, .growth .chips button { flex: 1; padding: 0 4px; }
-  .growth .chips { overflow-x: auto; scrollbar-width: none; }
+  .growth .chips { overflow-x: auto; scrollbar-width: none; max-width: 100%; min-width: 0; }
   .growth .chips button { flex: 1 0 auto; padding: 0 6px; font-size: 12.5px; }
   .gchart { height: 220px; }
   .cmp-total b { font-size: 22px; }

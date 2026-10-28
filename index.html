@@ -21,6 +21,7 @@
 <link rel="preload" href="fonts/geologica-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 <script src="boot.js"></script>
+<script src="plan-core.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -189,13 +190,14 @@
       <div class="panel-head">
         <div class="head-title">
           <h2 id="planTitle">План поповнення</h2>
-          <p class="panel-meta">Куди класти нові гроші, щоб жодна акція не займала більше за твою межу. Без продажів.</p>
+          <p class="panel-meta">Куди класти нові гроші, щоб жодна акція не займала більше за твою межу, а облігацій було скільки хочеш. Без продажів.</p>
         </div>
       </div>
       <div class="plan-body">
         <div class="plan-in">
           <label class="field plan-amt"><span>Сума поповнення, $</span><input id="planAmt" type="number" inputmode="decimal" min="1" step="1"></label>
           <div class="plan-cap"><span class="plan-label" id="planCapLabel">Межа для однієї акції</span><div class="chips" id="planCaps" role="radiogroup" aria-labelledby="planCapLabel"></div></div>
+          <div class="plan-cap"><span class="plan-label" id="planBondsLabel">Облігації в рахунку</span><div class="chips" id="planBonds" role="radiogroup" aria-labelledby="planBondsLabel"></div></div>
         </div>
         <div class="plan-out" id="planOut" aria-live="polite"></div>
       </div>
@@ -303,6 +305,7 @@
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6.5 9.5L12 15l5.5-5.5"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8"/><path d="M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4"/></symbol>
   <symbol id="i-buy" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-sell" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M5 9h13l-3.5-3.5M19 15H6l3.5 3.5"/></symbol>

@@ -1,0 +1,897 @@
+<title>Купівля в IBKR</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght,SHRP@300..700,0..100&display=swap">
+<style>
+/* Купівля: одна колонка, як бланк заявки. Зверху рахунок, далі що купити, нижче інша покупка і заявки, що чекають.
+   Палітра й гарнітура ті самі, що в Портфелі. */
+:root {
+  --paper: #f3f4f7;
+  --card: #ffffff;
+  --ink: #151b2c;
+  --ink-2: #4b556b;
+  --muted: #5f687c;
+  --line: #e2e5ec;
+  --line-2: #c9ced9;
+  --accent: #2e43c6;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(46, 67, 198, .09);
+  --up: #0b7a3e;
+  --up-soft: rgba(11, 122, 62, .10);
+  --down: #c53030;
+  --down-soft: rgba(197, 48, 48, .10);
+  --warn: #9a5b00;
+  --warn-soft: rgba(237, 161, 0, .14);
+  --mark-bg: #2e43c6;
+  --mark-ink: #ffffff;
+  --shadow: 0 1px 2px rgba(21, 27, 44, .06);
+  --font: 'Geologica', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --r-l: 20px;
+  --r-m: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f121a; --card: #171b26; --ink: #e8ebf3; --ink-2: #aeb6c8; --muted: #8b93a7;
+    --line: #252b39; --line-2: #3a4152; --accent: #8fa0ff; --accent-ink: #0f121a; --accent-soft: rgba(143, 160, 255, .13);
+    --up: #4acb86; --up-soft: rgba(74, 203, 134, .13); --down: #ff7d72; --down-soft: rgba(255, 125, 114, .13);
+    --warn: #f2b84b; --warn-soft: rgba(242, 184, 75, .12); --mark-bg: #8fa0ff; --mark-ink: #0f121a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f121a; --card: #171b26; --ink: #e8ebf3; --ink-2: #aeb6c8; --muted: #8b93a7;
+  --line: #252b39; --line-2: #3a4152; --accent: #8fa0ff; --accent-ink: #0f121a; --accent-soft: rgba(143, 160, 255, .13);
+  --up: #4acb86; --up-soft: rgba(74, 203, 134, .13); --down: #ff7d72; --down-soft: rgba(255, 125, 114, .13);
+  --warn: #f2b84b; --warn-soft: rgba(242, 184, 75, .12); --mark-bg: #8fa0ff; --mark-ink: #0f121a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--font); font-size: 15px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+p, h1, h2, h3, ul { margin: 0; }
+ul { padding: 0; list-style: none; }
+h1, h2 { font-weight: 600; text-wrap: balance; }
+button, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.mark-bg { fill: var(--mark-bg); }
+.mark-lines { stroke: var(--mark-ink); }
+.num { font-variant-numeric: tabular-nums; }
+
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-block: 18px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 14px;
+}
+
+/* Шапка */
+.top { display: flex; align-items: center; gap: 12px; }
+.mark { width: 34px; height: 34px; flex: none; }
+.top-t { display: grid; min-width: 0; }
+.top h1 { font-size: 22px; line-height: 1.1; letter-spacing: -.01em; font-variation-settings: 'SHRP' 100; }
+.top p { color: var(--muted); font-size: 13px; }
+.icon-btn {
+  margin-left: auto; display: inline-grid; place-items: center; flex: none;
+  width: 40px; height: 40px; border-radius: 12px; border: 0;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.icon-btn:hover { background: var(--accent-soft); color: var(--ink); }
+.icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn.spin svg { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Рахунок */
+.acct { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 2px 2px 0; color: var(--ink-2); font-size: 14px; }
+.acct b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.acct .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--up); margin-right: 7px; vertical-align: 1px; }
+.acct .dot.off { background: var(--muted); }
+
+/* Повідомлення на всю сторінку */
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: var(--r-m); background: var(--warn-soft); font-size: 14px; }
+.status p { flex: 1 1 260px; }
+.status.info { background: var(--accent-soft); }
+
+/* Картки */
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-l);
+  padding: 18px; display: grid; gap: 14px; min-width: 0; box-shadow: var(--shadow);
+}
+.card-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.card h2 { font-size: 18px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60; }
+.meta { color: var(--muted); font-size: 13px; }
+.note { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+/* Кнопки */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid transparent;
+  background: transparent; cursor: pointer; text-decoration: none; font-weight: 500; white-space: nowrap;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: var(--line-2); color: var(--ink); }
+.btn.ghost:hover { background: var(--accent-soft); }
+.btn.danger { border-color: var(--down); color: var(--down); }
+.btn[disabled] { opacity: .55; cursor: default; filter: none; }
+.btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Поля й перемикачі */
+.controls { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 14px 22px; align-items: start; }
+.amt { display: grid; gap: 6px; }
+.lbl, .amt > span { font-size: 13px; color: var(--ink-2); }
+.amt-in { position: relative; }
+.amt-in::before { content: '$'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; font-weight: 600; }
+.amt input, .find input, .pick input {
+  width: 100%; height: 48px; padding: 0 14px; border-radius: 12px;
+  border: 1px solid var(--line-2); background: var(--paper);
+}
+.amt input { padding-left: 30px; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.amt input:focus, .find input:focus, .pick input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.ctls { display: grid; gap: 10px; }
+.ctl { display: grid; gap: 6px; }
+.chips { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); justify-self: start; max-width: 100%; }
+.chips button {
+  min-height: 34px; padding: 0 12px; border-radius: 9px; border: 0; background: transparent;
+  color: var(--ink-2); cursor: pointer; font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.chips button:hover { color: var(--ink); }
+.chips button[aria-checked="true"] { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px var(--line); }
+.amt-hint { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); }
+
+.warn { padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); font-size: 14px; }
+
+/* Заявки за планом */
+.orders { display: grid; gap: 10px; }
+.order {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center;
+  padding: 14px 16px; border-radius: var(--r-m); background: var(--accent-soft);
+}
+.o-id { display: grid; gap: 2px; min-width: 0; }
+.tick { font-size: 24px; line-height: 1.05; font-weight: 650; letter-spacing: -.01em; font-variation-settings: 'SHRP' 100; color: var(--accent); }
+.o-about { font-size: 13px; color: var(--ink-2); }
+.o-amt { display: grid; justify-items: end; gap: 2px; text-align: right; }
+.o-amt b { font-size: 24px; line-height: 1.05; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; font-variation-settings: 'SHRP' 100; }
+.o-px { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.o-act { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.done { display: inline-flex; align-items: center; gap: 6px; color: var(--up); font-weight: 600; font-size: 14px; }
+.done svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.err { color: var(--down); font-size: 14px; flex-basis: 100%; }
+.hint { color: var(--ink-2); font-size: 13px; flex-basis: 100%; }
+.both { display: flex; justify-content: flex-end; }
+.why { font-size: 14px; color: var(--ink-2); }
+.why b { color: var(--ink); font-weight: 600; }
+
+/* Частки акцій */
+.shares { display: grid; }
+.shares li { display: grid; grid-template-columns: minmax(5rem, 8rem) auto minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.shares li:first-child { border-top: 0; }
+.shares .nm { font-weight: 600; }
+.shares .sh { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink-2); }
+.shares .ok { color: var(--up); font-weight: 500; }
+.shares .far { color: var(--ink-2); }
+.shares .far b { color: var(--ink); font-weight: 600; }
+.sum { font-size: 14px; color: var(--ink-2); }
+.sum b { color: var(--ink); font-weight: 600; }
+
+/* Пошук */
+.find { display: flex; gap: 8px; }
+.find input { flex: 1; min-width: 0; font-size: 16px; }
+.results { display: grid; }
+.results li { border-top: 1px solid var(--line); }
+.results li:first-child { border-top: 0; }
+.res {
+  width: 100%; display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; gap: 2px 12px; align-items: center;
+  padding: 10px 6px; border: 0; background: transparent; cursor: pointer; text-align: left; border-radius: 10px;
+}
+.res:hover { background: var(--accent-soft); }
+.res .s { font-weight: 650; font-variation-settings: 'SHRP' 60; }
+.res .d { color: var(--ink-2); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res .x { color: var(--muted); font-size: 12px; }
+.tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 600; vertical-align: 1px; }
+.pick { display: grid; gap: 12px; padding: 14px 16px; border-radius: var(--r-m); background: var(--accent-soft); }
+.pick-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+.pick .amt { flex: 0 1 12rem; }
+
+/* Заявки, що чекають */
+.pend { display: grid; }
+.pend li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.pend li:first-child { border-top: 0; }
+.p-main { display: grid; gap: 2px; min-width: 0; }
+.p-main b { font-weight: 600; }
+.p-main span { color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.p-act { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.p-act .btn { min-height: 34px; padding: 0 12px; font-size: 14px; }
+.p-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; }
+.empty { color: var(--muted); font-size: 14px; padding: 4px 0; }
+
+.foot { color: var(--muted); font-size: 12.5px; line-height: 1.55; padding: 0 2px; }
+
+@media (max-width: 560px) {
+  .controls { grid-template-columns: minmax(0, 1fr); }
+  .chips { width: 100%; }
+  .chips button { flex: 1; padding: 0 4px; }
+  .order { grid-template-columns: minmax(0, 1fr); }
+  .o-amt { justify-items: start; text-align: left; }
+  .o-act .btn { flex: 1 1 auto; }
+  .shares li { grid-template-columns: minmax(0, 1fr) auto; }
+  .shares li > :last-child { grid-column: 1 / -1; font-size: 13px; }
+  .res { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .res .x { grid-column: 2; }
+  .pend li { grid-template-columns: minmax(0, 1fr); }
+  .p-act { justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { .icon-btn.spin svg { animation: none; } }
+</style>
+
+<svg class="sprite" aria-hidden="true">
+  <!--@mark-->
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4.5v4.2h-4.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8"/><path d="M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><use href="#i-mark"></use></svg>
+    <div class="top-t">
+      <h1>Купівля</h1>
+      <p>Готує заявки в Interactive Brokers, а відправляєш їх ти.</p>
+    </div>
+    <button class="icon-btn" id="reload" type="button" aria-label="Оновити дані IBKR" title="Оновити дані IBKR"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+  </header>
+
+  <p class="acct" id="acct" aria-live="polite"><span><i class="dot off"></i>Підключаюся до IBKR через Claude…</span></p>
+  <div class="status" id="status" role="status" hidden></div>
+
+  <section class="card" id="plan" aria-labelledby="planH">
+    <div class="card-head">
+      <h2 id="planH">Що купити</h2>
+      <p class="meta">Те саме правило, що в «Плані поповнення» Портфеля</p>
+    </div>
+    <div class="controls">
+      <div class="amt">
+        <span id="amtL">Сума, $</span>
+        <div class="amt-in"><input id="amt" type="number" inputmode="decimal" min="1" step="0.01" aria-labelledby="amtL"></div>
+        <div class="amt-hint" id="amtHint"></div>
+      </div>
+      <div class="ctls">
+        <div class="ctl"><span class="lbl" id="capL">Межа для однієї акції</span><div class="chips" id="caps" role="radiogroup" aria-labelledby="capL"></div></div>
+        <div class="ctl"><span class="lbl" id="bondL">Облігації в рахунку</span><div class="chips" id="bondsC" role="radiogroup" aria-labelledby="bondL"></div></div>
+      </div>
+    </div>
+    <p class="warn" id="cashWarn" hidden></p>
+    <ul class="orders" id="orders" aria-live="polite"><li class="empty">Чекаю дані рахунку…</li></ul>
+    <div class="both" id="bothRow" hidden><button class="btn primary" id="bothBtn" type="button">Створити обидві заявки</button></div>
+    <p class="why" id="why"></p>
+    <ul class="shares" id="shares"></ul>
+    <p class="sum" id="sum"></p>
+  </section>
+
+  <section class="card" id="other" aria-labelledby="otherH">
+    <div class="card-head">
+      <h2 id="otherH">Інша покупка</h2>
+      <p class="meta">Акції й фонди американських бірж</p>
+    </div>
+    <form class="find" id="findForm" role="search">
+      <input id="q" type="search" placeholder="Тікер або назва: KO, SGOV, Coca-Cola" autocomplete="off" aria-label="Тікер або назва">
+      <button class="btn ghost" type="submit">Знайти</button>
+    </form>
+    <ul class="results" id="results"></ul>
+    <div class="pick" id="pick" hidden></div>
+    <p class="note">Облігації тут купуються через фонди: SGOV і BIL (уряд США, до 3 місяців), BND (облігації США всіх строків). Окремих облігацій конектор IBKR не підтримує, їх купують у самому IBKR.</p>
+  </section>
+
+  <section class="card" id="pending" aria-labelledby="pendH">
+    <div class="card-head">
+      <h2 id="pendH">Заявки, що чекають</h2>
+      <button class="linkish" id="pendReload" type="button">Оновити список</button>
+    </div>
+    <ul class="pend" id="pend"><li class="empty">Ще не завантажено.</li></ul>
+    <p class="note">Заявка сама нічого не купує. Вона чекає в IBKR у розділі Orders &amp; Trades → AI Instructions, поки ти не перевіриш її й не натиснеш Submit. Там же її можна змінити.</p>
+  </section>
+
+  <p class="foot">Сторінка звертається до IBKR через твій конектор Interactive Brokers у Claude: паролів і ключів вона не бачить, а відправити заявку можеш лише ти. Ціна в заявці лімітна: поточна ціна продажу плюс 0.1%, тож дорожче вона не купить. Суми рахує те саме правило, що й Портфель. Це арифметика, а не інвестиційна порада.</p>
+</div>
+
+<script>
+/*@plan-core*/
+</script>
+<script>
+(function () {
+  'use strict';
+  var P = window.PortfelPlan;
+  var SERVER = 'Interactive Brokers (IBKR)';
+  var $ = function (id) { return document.getElementById(id); };
+  var NAMES = {
+    AAPL: 'Apple', TSLA: 'Tesla', MSFT: 'Microsoft', NVDA: 'Nvidia', AMZN: 'Amazon', GOOGL: 'Alphabet', GOOG: 'Alphabet',
+    META: 'Meta', AVGO: 'Broadcom', 'BRK.B': 'Berkshire Hathaway', LLY: 'Eli Lilly', KO: 'Coca-Cola', ORCL: 'Oracle',
+    AMD: 'AMD', JPM: 'JPMorgan', V: 'Visa', MA: 'Mastercard', WMT: 'Walmart', XOM: 'ExxonMobil', JNJ: 'Johnson & Johnson',
+    NFLX: 'Netflix', PLTR: 'Palantir', HIMS: 'Hims & Hers', ZIM: 'ZIM', INTC: 'Intel', COST: 'Costco', PG: 'Procter & Gamble',
+    UNH: 'UnitedHealth', BAC: 'Bank of America', CVX: 'Chevron', CSCO: 'Cisco', MU: 'Micron', ABBV: 'AbbVie'
+  };
+  var KEYS = { amount: 'kupivlia.amount', cap: 'kupivlia.cap', bonds: 'kupivlia.bonds', links: 'kupivlia.links' };
+
+  /* ---------- Дрібниці ---------- */
+  var nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nf1 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var nfq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 });
+  function ok(x) { return typeof x === 'number' && isFinite(x); }
+  function num(x) { var n = Number(x); return isFinite(n) ? n : null; }
+  function usd(x) { return ok(x) ? (x <= -0.005 ? '−' : '') + '$' + nf2.format(Math.abs(x)) : 'н/д'; }
+  function pct(x, d) {
+    if (!ok(x)) return 'н/д';
+    var v = Math.abs(x * 100);
+    return (x * 100 <= -0.05 ? '−' : '') + (d === 0 ? String(Math.round(v)) : nf1.format(v)) + '%';
+  }
+  function floor2(x) { return Math.floor(x * 100 + 1e-6) / 100; }
+  function plural(n, f) { var a = n % 10, b = n % 100; return a === 1 && b !== 11 ? f[0] : a >= 2 && a <= 4 && (b < 12 || b > 14) ? f[1] : f[2]; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function timeOf(t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* без збереження */ } }
+  };
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'text') el.textContent = v;
+      else if (k === 'class') el.className = v;
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { add(el, x); }); return; }
+    el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  function icon(id) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true');
+    var u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    u.setAttribute('href', '#' + id); s.append(u);
+    return s;
+  }
+  function nameOf(sym) { return NAMES[sym] || sym; }
+
+  /* ---------- Стан ---------- */
+  var S = {
+    mcp: null, perm: null, acct: null, acctAt: 0, m: null, prices: {}, done: {}, pending: null,
+    conids: {}, pick: null, busy: false
+  };
+  Object.keys(P.FUNDS).forEach(function (s) { S.conids[P.FUNDS[s].conid] = s; });
+  var links = {};
+  try { links = JSON.parse(store.get(KEYS.links) || '{}') || {}; } catch (e) { links = {}; }
+  function saveLink(id, rec) {
+    links[id] = rec;
+    var ids = Object.keys(links).sort(function (a, b) { return (links[b].t || 0) - (links[a].t || 0); });
+    ids.slice(40).forEach(function (k) { delete links[k]; });
+    store.set(KEYS.links, JSON.stringify(links));
+  }
+
+  // Налаштування: з посилання Портфеля, інакше збережені, інакше типові
+  var set = { amount: Number(store.get(KEYS.amount)) || 50, cap: Number(store.get(KEYS.cap)) || 0.1, bonds: Number(store.get(KEYS.bonds)) || 0 };
+  if (P.CAPS.indexOf(set.cap) < 0) set.cap = 0.1;
+  if (P.BOND_SHARES.indexOf(set.bonds) < 0) set.bonds = 0;
+  var amountFrom = 'stored';           // link | cash | user | stored
+  function applyHash() {
+    var s = P.fromHash(location.hash);
+    if (!s) return false;
+    set.amount = s.amount; set.cap = s.cap; set.bonds = s.bonds;
+    saveSet(); amountFrom = 'link';
+    return true;
+  }
+  function saveSet() {
+    store.set(KEYS.amount, String(set.amount)); store.set(KEYS.cap, String(set.cap)); store.set(KEYS.bonds, String(set.bonds));
+  }
+  applyHash();
+
+  /* ---------- Конектор ---------- */
+  function pl(r) { return r && r.payload !== undefined ? r.payload : r; }
+  async function read(tool, input, fresh, retried) {
+    try {
+      return await S.mcp.callTool(SERVER, tool, input || {}, { cache: fresh ? { staleTime: 0, gcTime: 300000, refresh: true } : { staleTime: 20000, gcTime: 300000 } });
+    } catch (e) {
+      if (e && e.retryable && !retried) {
+        await sleep(Math.min(e.retryAfterMs || 1200 + Math.random() * 1200, 8000));
+        return read(tool, input, fresh, true);
+      }
+      throw e;
+    }
+  }
+  function write(tool, input) { return S.mcp.callTool(SERVER, tool, input, { cache: false }); }
+
+  function toolText(e) {
+    var t = '', r = e && e.result;
+    if (r && Array.isArray(r.content)) t = r.content.filter(function (b) { return b && b.type === 'text'; }).map(function (b) { return b.text; }).join(' ');
+    if (!t && r && r.structuredContent) { try { t = JSON.stringify(r.structuredContent); } catch (x) { /* нічого */ } }
+    if (!t && e && e.message) t = e.message;
+    try {
+      var j = JSON.parse(t);
+      t = (j && (j.error && (j.error.message || j.error) || j.message || j.detail || j.error_description)) || t;
+      if (typeof t !== 'string') t = JSON.stringify(t);
+    } catch (x) { /* текст як є */ }
+    return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 240) || 'без пояснення';
+  }
+  function errMsg(e) {
+    switch (e && e.code) {
+      case 'needs_reauth': return 'Конектор Interactive Brokers просить увійти знову: claude.ai → Налаштування → Конектори.';
+      case 'server_not_connected': case 'server_not_found': return 'У Claude не підключено Interactive Brokers. Додай його: claude.ai → Налаштування → Конектори.';
+      case 'selection_required': return 'У тебе кілька конекторів Interactive Brokers. Обери потрібний у вікні Claude.';
+      case 'not_in_manifest': case 'consent_required': return 'Сторінці не дозволено звертатися до IBKR.';
+      case 'blocked_by_policy': return 'Налаштування організації в Claude не дозволяють цю дію.';
+      case 'approval_required': return 'Дія чекає твого дозволу в Claude. Натисни ще раз і дозволь.';
+      case 'tool_error': return 'IBKR відповів: ' + toolText(e);
+      case 'server_unavailable': case 'rate_limited': case 'upstream_error': return 'IBKR зараз не відповідає. Спробуй за хвилину.';
+      case 'not_granted': case 'capability_disabled': case 'capability_removed': return 'Тут сторінка не має доступу до конекторів. Відкрий її в Claude.';
+      case 'cancelled': return 'Скасовано.';
+      default: return 'Не вдалося' + (e && e.code ? ' (' + e.code + ')' : '') + '.';
+    }
+  }
+  var PAGE_CODES = ['needs_reauth', 'server_not_connected', 'server_not_found', 'selection_required', 'not_in_manifest', 'consent_required', 'blocked_by_policy', 'not_granted', 'capability_disabled', 'capability_removed'];
+  function isPageErr(e) { return e && PAGE_CODES.indexOf(e.code) >= 0; }
+
+  function showStatus(text, kind, action) {
+    var st = $('status');
+    st.replaceChildren(h('p', { text: text }));
+    if (action) st.append(action);
+    st.className = 'status' + (kind ? ' ' + kind : '');
+    st.hidden = false;
+  }
+  function clearStatus() { $('status').hidden = true; }
+  function pageError(e) {
+    var act = null;
+    if (e && (e.code === 'not_in_manifest' || e.code === 'consent_required' || e.code === 'approval_required')) {
+      act = h('button', { class: 'btn primary', type: 'button', text: 'Дозволити доступ', onclick: allow });
+    } else if (e && (e.code === 'server_unavailable' || e.code === 'upstream_error' || e.code === 'rate_limited' || e.code === 'selection_required')) {
+      act = h('button', { class: 'btn ghost', type: 'button', text: 'Спробувати ще', onclick: function () { loadAccount(true); } });
+    }
+    showStatus(errMsg(e), '', act);
+    $('acct').replaceChildren(h('span', null, h('i', { class: 'dot off' }), 'Немає даних IBKR'));
+  }
+  async function allow() {
+    if (S.perm) {
+      try {
+        var name = 'mcp:' + SERVER;
+        var st = await S.perm.request([name]);
+        if (st[name] === 'denied') { try { await S.perm.manage(); } catch (x) { showStatus('Дозволь доступ до Interactive Brokers у меню цієї сторінки: Permissions.', ''); return; } }
+      } catch (x) { /* далі просто пробуємо */ }
+    }
+    loadAccount(true);
+  }
+
+  /* ---------- Рахунок ---------- */
+  function parseAccount(pos, sum) {
+    var list = (pos && pos.positions) || [];
+    var holdings = list.filter(function (p) { return p && num(p.market_value) > 0 && (!p.asset_class || p.asset_class === 'STK'); }).map(function (p) {
+      var sym = String(p.contract_description || p.symbol || '').trim().split(/\s+/)[0].toUpperCase();
+      if (p.contract_id) S.conids[p.contract_id] = sym;
+      return { sym: sym, name: nameOf(sym), value: num(p.market_value), type: P.typeOf(sym, false), conid: p.contract_id, price: num(p.market_price) };
+    });
+    var invested = holdings.reduce(function (s, x) { return s + x.value; }, 0);
+    var cash = sum ? num(sum.available_funds != null ? sum.available_funds : sum.total_cash_value) : null;
+    var nav = sum ? num(sum.net_liquidation) : null;
+    if (!ok(cash)) cash = 0;
+    if (!ok(nav) || nav <= 0) nav = invested + Math.max(0, cash);
+    return { holdings: holdings, nav: nav, cash: cash, ccy: (sum && sum.currency) || 'USD' };
+  }
+
+  async function loadAccount(fresh) {
+    if (!S.mcp) return;
+    var btn = $('reload'); btn.classList.add('spin');
+    try {
+      var pos = pl(await read('get_account_positions', {}, fresh));
+      var sum = pl(await read('get_account_summary', {}, fresh));
+      S.acct = parseAccount(pos, sum);
+      S.acctAt = Date.now();
+      clearStatus();
+      // Без посилання з Портфеля і без своєї суми беремо всі вільні гроші, якщо вони є
+      if ((amountFrom === 'stored' || amountFrom === 'cash') && S.acct.cash >= 1) { set.amount = floor2(S.acct.cash); amountFrom = 'cash'; }
+      renderAcct();
+      renderPlan();
+      loadPending(fresh);
+    } catch (e) {
+      pageError(e);
+    } finally {
+      btn.classList.remove('spin');
+    }
+  }
+  function renderAcct() {
+    var a = S.acct;
+    var el = $('acct');
+    el.replaceChildren(
+      h('span', null, h('i', { class: 'dot' }), 'Дані IBKR на ' + timeOf(S.acctAt)),
+      h('span', null, 'Рахунок ', h('b', { text: usd(a.nav) })),
+      h('span', null, 'Вільні гроші ', h('b', { text: usd(a.cash) })));
+    if (a.ccy !== 'USD') el.append(h('span', { text: 'Базова валюта рахунку: ' + a.ccy + '. Суми тут у доларах, тож перевір їх в IBKR.' }));
+  }
+
+  /* ---------- Ціни ---------- */
+  async function priceOf(conid, exch, fresh) {
+    var key = String(conid);
+    var c = S.prices[key];
+    if (c && !fresh && Date.now() - c.at < 15000) return c;
+    var input = { contract_id: Number(conid), market_data_names: ['bid_ask', 'last', 'prior_close'] };
+    if (exch) input.exchange = exch;
+    var p = pl(await read('get_price_snapshot', input, fresh)) || {};
+    var ba = p['bid-ask'] || {}, last = p.last || {}, pc = p['prior-close'] || {};
+    var r = { ask: num(ba.ask), bid: num(ba.bid), last: num(last.price), close: num(pc.price != null ? pc.price : pc.close), at: Date.now() };
+    if (!(r.ask > 0) && !(r.last > 0) && !(r.close > 0)) {
+      var held = S.acct && S.acct.holdings.filter(function (x) { return String(x.conid) === key; })[0];
+      if (held && held.price > 0) r.close = held.price;
+    }
+    r.ref = r.ask > 0 ? r.ask : r.last > 0 ? r.last : r.close > 0 ? r.close : null;
+    S.prices[key] = r;
+    return r;
+  }
+  // Ліміт: ціна продажу + 0.1%, округлена вгору до кроку ціни
+  function limitFor(ref, venue) {
+    var step = venue === 'LSE' ? 0.05 : 0.01;
+    return Number((Math.ceil(ref * 1.001 / step - 1e-9) * step).toFixed(2));
+  }
+  function qtyFor(amount, lim) { return Math.floor(amount / lim * 10000 + 1e-9) / 10000; }
+
+  /* ---------- Створення заявки ---------- */
+  function findUrl(x, depth) {
+    if (depth > 6 || x == null) return null;
+    if (typeof x === 'string') { var m = /https:\/\/[^\s"'<>)\]]+/.exec(x); return m ? m[0] : null; }
+    if (Array.isArray(x)) { for (var i = 0; i < x.length; i++) { var u = findUrl(x[i], depth + 1); if (u) return u; } return null; }
+    if (typeof x === 'object') {
+      var keys = Object.keys(x).sort(function (a, b) { return (/url|link/i.test(b) ? 1 : 0) - (/url|link/i.test(a) ? 1 : 0); });
+      for (var k = 0; k < keys.length; k++) { var v = findUrl(x[keys[k]], depth + 1); if (v) return v; }
+    }
+    return null;
+  }
+  function findId(x) {
+    if (!x || typeof x !== 'object') return null;
+    var v = x.id != null ? x.id : x.instruction_id != null ? x.instruction_id : x.instructionId;
+    if (v == null && x.instruction && typeof x.instruction === 'object') return findId(x.instruction);
+    return v == null ? null : String(v);
+  }
+
+  // o: {sym, conid, exch, venue, amount}
+  async function createInstruction(o) {
+    var px = null;
+    try { px = await priceOf(o.conid, o.exch, true); } catch (e) { if (isPageErr(e)) throw e; }
+    var input = { contract_id_ex: String(o.conid), side: 'BUY', time_in_force: 'DAY' };
+    var lim = null, qty = null;
+    if (px && px.ref > 0) {
+      lim = limitFor(px.ref, o.venue);
+      qty = qtyFor(o.amount, lim);
+      if (qty < 0.0001) throw { code: 'small', message: 'Сума замала навіть для частки цього паперу.' };
+      input.order_type = 'LIMIT'; input.limit_price = lim; input.quantity = qty;
+    }
+    var res, noQty = qty > 0 ? null : 'price';
+    try {
+      res = await write('create_order_instruction', input);
+    } catch (e) {
+      // IBKR може не прийняти дробову кількість: тоді заявка без кількості, суму вводиш при перевірці
+      if (e && e.code === 'tool_error' && input.quantity && /fraction|quantit|increment|lot|size|decimal|whole/i.test(toolText(e))) {
+        var retry = Object.assign({}, input);
+        delete retry.quantity; noQty = 'fraction';
+        res = await write('create_order_instruction', retry);
+      } else throw e;
+    }
+    var payload = pl(res);
+    var url = findUrl(payload, 0) || findUrl(res && res.content, 0);
+    var id = findId(payload);
+    var rec = { url: url, sym: o.sym, amount: o.amount, qty: noQty ? null : qty, lim: lim, t: Date.now() };
+    saveLink(id || ('t' + rec.t), rec);
+    S.conids[o.conid] = o.sym;
+    return { url: url, id: id, qty: noQty ? null : qty, lim: lim, noQty: noQty };
+  }
+
+  // Рядок дії під заявкою: кнопка, або «створено» з посиланням, або помилка
+  function actionRow(o, key, label) {
+    var box = h('div', { class: 'o-act' });
+    var st = S.done[key];
+    if (st && st.ok) {
+      box.append(h('span', { class: 'done' }, icon('i-check'), 'Заявку створено'));
+      if (st.url) box.append(h('a', { class: 'btn primary', href: st.url, target: '_blank', rel: 'noopener' }, 'Перевірити й відправити в IBKR', icon('i-out')));
+      else box.append(h('span', { class: 'hint', text: 'Відкрий IBKR: Orders & Trades → AI Instructions, перевір і натисни Submit.' }));
+      if (st.noQty === 'fraction') box.append(h('span', { class: 'hint', text: 'IBKR не прийняв дробову кількість, тож у заявці її немає: при перевірці вкажи суму ' + usd(o.amount) + '.' }));
+      else if (st.noQty === 'price') box.append(h('span', { class: 'hint', text: 'Ціни зараз немає, тож кількість і ліміт вкажеш при перевірці: на суму ' + usd(o.amount) + '.' }));
+      return box;
+    }
+    var b = h('button', { class: 'btn primary', type: 'button', text: st && st.busy ? 'Створюю…' : label || 'Створити заявку' });
+    if ((st && st.busy) || !S.mcp) b.disabled = true;
+    b.addEventListener('click', function () { runCreate(o, key); });
+    box.append(b);
+    if (st && st.err) box.append(h('p', { class: 'err', text: st.err }));
+    return box;
+  }
+  async function runCreate(o, key, quiet) {
+    if (S.done[key] && (S.done[key].busy || S.done[key].ok)) return;
+    S.done[key] = { busy: true };
+    rerender(key);
+    try {
+      var r = await createInstruction(o);
+      S.done[key] = { ok: true, url: r.url, noQty: r.noQty };
+      loadPending(true);
+    } catch (e) {
+      var msg = e && e.code === 'small' ? e.message : errMsg(e);
+      if (e && (e.code === 'server_unavailable' || e.code === 'upstream_error' || e.code === 'cancelled')) {
+        msg = 'Невідомо, чи створилася заявка: IBKR не відповів вчасно. Глянь список «Заявки, що чекають», перш ніж пробувати знову.';
+        loadPending(true);
+      }
+      S.done[key] = { err: msg };
+      if (isPageErr(e) && !quiet) pageError(e);
+    }
+    rerender(key);
+  }
+  function rerender(key) {
+    if (key.indexOf('pick:') === 0) renderPick(); else renderOrders();
+  }
+
+  /* ---------- План ---------- */
+  function chips(box, values, cur, onPick, fmt) {
+    box.replaceChildren();
+    values.forEach(function (v) {
+      box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === cur), text: fmt(v), onclick: function () { onPick(v); } }));
+    });
+  }
+  function renderControls() {
+    var amt = $('amt');
+    if (document.activeElement !== amt) amt.value = String(set.amount);
+    chips($('caps'), P.CAPS, set.cap, function (v) { set.cap = v; saveSet(); renderPlan(); }, function (v) { return pct(v, 0); });
+    chips($('bondsC'), P.BOND_SHARES, set.bonds, function (v) { set.bonds = v; saveSet(); renderPlan(); }, function (v) { return v ? pct(v, 0) : 'Без'; });
+    var hint = $('amtHint');
+    hint.replaceChildren();
+    var a = S.acct;
+    if (a && a.cash >= 1 && Math.abs(floor2(a.cash) - set.amount) > 0.004) {
+      hint.append(h('button', { class: 'linkish', type: 'button', text: 'Узяти всі вільні ' + usd(floor2(a.cash)), onclick: function () { set.amount = floor2(a.cash); amountFrom = 'cash'; saveSet(); renderPlan(); } }));
+    }
+    if (amountFrom === 'link') hint.append(h('span', { text: 'Сума й правило з Портфеля' }));
+    else if (amountFrom === 'cash') hint.append(h('span', { text: 'Усі вільні гроші на рахунку' }));
+  }
+  function orderKey(o) { return o.sym + '|' + o.amount.toFixed(2); }
+
+  function renderPlan() {
+    renderControls();
+    var a = S.acct;
+    if (!a) return;
+    S.m = P.model({ nav: a.nav, cash: a.cash, amount: set.amount, cap: set.cap, bonds: set.bonds, holdings: a.holdings });
+    var warn = $('cashWarn');
+    if (a.cash + 0.005 < set.amount) {
+      warn.textContent = 'На рахунку вільних ' + usd(a.cash) + '. Заявку можна створити вже зараз, але IBKR виконає її лише тоді, коли гроші надійдуть.';
+      warn.hidden = false;
+    } else warn.hidden = true;
+    renderOrders();
+    renderWhy();
+    S.m.orders.forEach(function (o) {
+      priceOf(o.conid, o.exch).then(function () { renderOrders(); }).catch(function () { /* без ціни теж можна */ });
+    });
+  }
+  function renderOrders() {
+    var m = S.m, ul = $('orders');
+    if (!m) return;
+    ul.replaceChildren();
+    if (!m.orders.length) { ul.append(h('li', { class: 'empty', text: 'Вкажи суму, щоб побачити, що купити.' })); $('bothRow').hidden = true; return; }
+    m.orders.forEach(function (o) {
+      var px = S.prices[String(o.conid)];
+      var pxText = 'ціну уточнюю…';
+      if (px && px.ref > 0) {
+        var lim = limitFor(px.ref, o.venue);
+        pxText = '≈ ' + nfq.format(qtyFor(o.amount, lim)) + ' шт. по ' + usd(px.ref) + (px.ask > 0 ? '' : ', остання ціна');
+      } else if (px) pxText = 'зараз немає ціни: вкажеш при перевірці';
+      ul.append(h('li', { class: 'order' },
+        h('div', { class: 'o-id' }, h('b', { class: 'tick', text: o.sym }), h('span', { class: 'o-about', text: o.about })),
+        h('div', { class: 'o-amt' }, h('b', { text: usd(o.amount) }), h('span', { class: 'o-px', text: pxText })),
+        actionRow(o, orderKey(o))));
+    });
+    var pendingKeys = m.orders.filter(function (o) { var st = S.done[orderKey(o)]; return !(st && (st.ok || st.busy)); });
+    $('bothRow').hidden = !(m.orders.length > 1 && pendingKeys.length > 1);
+    $('bothBtn').disabled = !S.mcp;
+  }
+  $('bothBtn').addEventListener('click', async function () {
+    var list = (S.m && S.m.orders) || [];
+    for (var i = 0; i < list.length; i++) await runCreate(list[i], orderKey(list[i]));
+  });
+
+  function renderWhy() {
+    var m = S.m, why = $('why');
+    why.replaceChildren();
+    var parts = P.notes(m);
+    why.textContent = parts.join(' ');
+
+    var ul = $('shares');
+    ul.replaceChildren();
+    m.stocks.forEach(function (s) {
+      var st;
+      if (!s.over) st = h('span', { class: 'ok', text: 'у межах' });
+      else if (!isFinite(s.need)) st = h('span', { class: 'far', text: 'у ринку ' + s.name + ' займає ' + pct(s.w) + ', нижчу межу фондами не досягти' });
+      else st = h('span', { class: 'far' }, 'до межі треба вкласти ще ', h('b', { text: usd(Math.max(0, s.need - m.amount)) }));
+      ul.append(h('li', null, h('span', { class: 'nm', text: s.name }), h('span', { class: 'sh', text: pct(s.now) + ' → ' + pct(s.after) }), st));
+    });
+    var sum = $('sum');
+    sum.replaceChildren();
+    if (isFinite(m.needAll) && m.rest > 0.5) {
+      var n = Math.ceil(m.rest / m.amount);
+      sum.append('Щоб усі акції опустилися до ' + pct(m.cap, 0) + ' без продажів, треба вкласти ще ', h('b', { text: usd(m.rest) }),
+        n === 1 ? ': вистачить наступного поповнення.' : ': приблизно ' + n + ' ' + plural(n, ['таке поповнення', 'такі поповнення', 'таких поповнень']) + ' по ' + usd(m.amount) + '.');
+    } else if (isFinite(m.needAll) && m.stocks.length) {
+      sum.textContent = 'Після цієї покупки всі акції будуть у межах ' + pct(m.cap, 0) + '.';
+    }
+  }
+
+  $('amt').addEventListener('input', function () {
+    var v = Number(String($('amt').value).replace(',', '.'));
+    if (v > 0 && v < 1e7) { set.amount = Math.round(v * 100) / 100; amountFrom = 'user'; saveSet(); renderPlan(); }
+  });
+
+  /* ---------- Інша покупка ---------- */
+  $('findForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var q = $('q').value.trim();
+    if (q) find(q);
+  });
+  async function find(q) {
+    var ul = $('results');
+    S.pick = null; $('pick').hidden = true;
+    ul.replaceChildren(h('li', { class: 'empty', text: 'Шукаю…' }));
+    if (!S.mcp) { ul.replaceChildren(h('li', { class: 'empty', text: 'Пошук працює лише в Claude з конектором IBKR.' })); return; }
+    try {
+      var r = pl(await read('search_contracts', { query: q }));
+      var list = ((r && r.results) || []).filter(function (x) {
+        return x && x.underlying_contract_id && x.country_code === 'US' && (x.sections || []).some(function (s) { return s.security_type === 'STK'; });
+      }).slice(0, 8);
+      ul.replaceChildren();
+      if (!list.length) { ul.append(h('li', { class: 'empty', text: 'На американських біржах нічого не знайшлося. Спробуй тікер.' })); return; }
+      list.forEach(function (x) {
+        var t = P.typeOf(x.symbol, false);
+        var tag = t === 'bond' ? 'облігації' : t === 'tracker' ? 'S&P 500' : t === 'fund' ? 'фонд' : null;
+        ul.append(h('li', null, h('button', { class: 'res', type: 'button', onclick: function () { choose(x); } },
+          h('span', { class: 's', text: x.symbol }),
+          h('span', { class: 'd' }, x.description || '', tag ? h('span', { class: 'tag', text: tag }) : null),
+          h('span', { class: 'x', text: x.exchange || '' }))));
+      });
+    } catch (e) {
+      ul.replaceChildren(h('li', { class: 'err', text: errMsg(e) }));
+      if (isPageErr(e)) pageError(e);
+    }
+  }
+  function choose(x) {
+    S.pick = { sym: String(x.symbol).toUpperCase(), conid: x.underlying_contract_id, exch: '', venue: 'US', desc: x.description || '', amount: S.pick && S.pick.amount || 10 };
+    S.conids[x.underlying_contract_id] = S.pick.sym;
+    $('results').replaceChildren();
+    renderPick();
+    priceOf(S.pick.conid, '').then(renderPick).catch(renderPick);
+  }
+  function renderPick() {
+    var p = S.pick, box = $('pick');
+    if (!p) { box.hidden = true; return; }
+    var key = 'pick:' + p.sym + '|' + p.amount.toFixed(2);
+    var px = S.prices[String(p.conid)];
+    var pxText = px ? (px.ref > 0 ? '≈ ' + nfq.format(qtyFor(p.amount, limitFor(px.ref, 'US'))) + ' шт. по ' + usd(px.ref) : 'зараз немає ціни: вкажеш при перевірці') : 'ціну уточнюю…';
+    var input = h('input', { id: 'pickAmt', type: 'number', inputmode: 'decimal', min: '1', step: '0.01', value: String(p.amount), 'aria-label': 'Сума, $' });
+    input.addEventListener('change', function () {
+      var v = Number(String(input.value).replace(',', '.'));
+      if (v > 0 && v < 1e7) { p.amount = Math.round(v * 100) / 100; renderPick(); }
+    });
+    box.replaceChildren(
+      h('div', { class: 'o-id' }, h('b', { class: 'tick', text: p.sym }), h('span', { class: 'o-about', text: p.desc })),
+      h('div', { class: 'pick-row' },
+        h('label', { class: 'amt' }, h('span', { text: 'Сума, $' }), h('div', { class: 'amt-in' }, input)),
+        h('span', { class: 'o-px', text: pxText }),
+        h('button', { class: 'linkish', type: 'button', text: 'Обрати інший', onclick: function () { S.pick = null; renderPick(); $('q').focus(); } })),
+      actionRow(p, key, 'Створити заявку на ' + p.sym));
+    box.hidden = false;
+  }
+
+  /* ---------- Заявки, що чекають ---------- */
+  $('pendReload').addEventListener('click', function () { loadPending(true); });
+  async function loadPending(fresh) {
+    if (!S.mcp) return;
+    var ul = $('pend');
+    try {
+      var r = pl(await read('get_order_instructions', {}, fresh));
+      S.pending = (r && (r.instructions || r.items)) || (Array.isArray(r) ? r : []);
+      renderPending();
+    } catch (e) {
+      ul.replaceChildren(h('li', { class: 'err', text: errMsg(e) }));
+    }
+  }
+  function insView(x) {
+    var id = x.id != null ? x.id : x.instruction_id != null ? x.instruction_id : x.instructionId;
+    var conid = String(x.contract_id_ex != null ? x.contract_id_ex : x.contract_id != null ? x.contract_id : '').split('@')[0];
+    var side = String(x.side || x.direction || x.trade_direction || '').toUpperCase();
+    var type = String(x.order_type || x.orderType || '').toUpperCase();
+    var lp = num(x.limit_price != null ? x.limit_price : x.limitPrice);
+    var qty = num(x.quantity);
+    var created = x.created_at || x.creation_time || x.created || x.createdAt || x.creation_date;
+    var exp = x.expiration || x.expires_at || x.expiration_time || x.expiry;
+    var sym = S.conids[conid] || (links[id] && links[id].sym) || null;
+    return { id: id == null ? null : String(id), sym: sym, conid: conid, side: side, type: type, lp: lp, qty: qty, created: created, exp: exp, desc: x.description || '' };
+  }
+  function dateText(s) {
+    if (!s) return '';
+    var d = new Date(s);
+    if (isNaN(d)) return String(s);
+    return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) + ' ' + timeOf(d);
+  }
+  function renderPending() {
+    var ul = $('pend');
+    ul.replaceChildren();
+    var list = (S.pending || []).map(insView);
+    if (!list.length) { ul.append(h('li', { class: 'empty', text: 'Немає заявок, що чекають.' })); return; }
+    list.forEach(function (v) {
+      var title = (v.side === 'SELL' ? 'Продати ' : v.side === 'BUY' ? 'Купити ' : '') + (v.sym || v.desc || ('контракт ' + v.conid));
+      var bits = [];
+      if (v.qty > 0) bits.push(nfq.format(v.qty) + ' шт.');
+      if (v.type === 'LIMIT' && v.lp > 0) bits.push('ліміт ' + usd(v.lp)); else if (v.type === 'MARKET') bits.push('за ринком');
+      if (v.qty > 0 && v.lp > 0) bits.push('до ' + usd(v.qty * v.lp));
+      if (v.created) bits.push('створено ' + dateText(v.created));
+      if (v.exp) bits.push('діє до ' + dateText(v.exp));
+      var li = h('li', null, h('div', { class: 'p-main' }, h('b', { text: title }), h('span', { text: bits.join(' · ') || v.desc })));
+      var act = h('div', { class: 'p-act' });
+      var link = v.id && links[v.id] && links[v.id].url;
+      if (link) act.append(h('a', { class: 'btn ghost', href: link, target: '_blank', rel: 'noopener' }, 'Відкрити в IBKR', icon('i-out')));
+      if (v.id) act.append(h('button', { class: 'btn ghost', type: 'button', text: 'Видалити', onclick: function () { askDelete(li, v); } }));
+      li.append(act);
+      ul.append(li);
+    });
+  }
+  function askDelete(li, v) {
+    var old = li.querySelector('.p-ask');
+    if (old) old.remove();
+    var ask = h('div', { class: 'p-ask' }, h('span', { text: 'Видалити цю заявку? Купівлі за нею не буде.' }));
+    var yes = h('button', { class: 'btn danger', type: 'button', text: 'Так, видалити' });
+    var no = h('button', { class: 'btn ghost', type: 'button', text: 'Ні', onclick: function () { ask.remove(); } });
+    yes.addEventListener('click', async function () {
+      yes.disabled = true; no.disabled = true; yes.textContent = 'Видаляю…';
+      try {
+        await write('delete_order_instruction', { id: String(v.id) });
+        delete links[v.id]; store.set(KEYS.links, JSON.stringify(links));
+        Object.keys(S.done).forEach(function (k) { if (S.done[k] && S.done[k].ok) delete S.done[k]; });
+        await loadPending(true);
+        renderOrders(); renderPick();
+      } catch (e) {
+        ask.replaceChildren(h('span', { class: 'err', text: errMsg(e) }));
+      }
+    });
+    ask.append(yes, no);
+    li.append(ask);
+  }
+
+  /* ---------- Старт ---------- */
+  $('reload').addEventListener('click', function () { S.prices = {}; loadAccount(true); });
+  window.addEventListener('hashchange', function () { if (applyHash()) renderPlan(); });
+  renderControls();
+
+  (async function boot() {
+    var mcp = null;
+    try { mcp = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('mcp') : null; } catch (e) { mcp = null; }
+    if (!mcp) {
+      showStatus('Ця сторінка працює лише в Claude, де підключено конектор Interactive Brokers. Відкрий її на claude.ai.', 'info');
+      $('acct').replaceChildren(h('span', null, h('i', { class: 'dot off' }), 'Немає зв\'язку з IBKR'));
+      $('orders').replaceChildren(h('li', { class: 'empty', text: 'Без зв\'язку з IBKR план не порахувати.' }));
+      $('pend').replaceChildren(h('li', { class: 'empty', text: 'Без зв\'язку з IBKR список недоступний.' }));
+      return;
+    }
+    S.mcp = mcp;
+    // Назва конектора така, як її записано в дозволах сторінки
+    try {
+      var lt = await mcp.listTools();
+      var found = ((lt && lt.servers) || []).filter(function (x) { return x && /interactive\s*brokers|ibkr/i.test(x.server || ''); })[0];
+      if (found) SERVER = found.server;
+    } catch (e) { /* лишається типова назва */ }
+    try { S.perm = await window.claude.use('permissions'); } catch (e) { S.perm = null; }
+    loadAccount(false);
+  })();
+})();
+</script>
