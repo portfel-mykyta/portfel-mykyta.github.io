@@ -8,9 +8,9 @@
   'use strict';
 
   /* ---------- Налаштування ---------- */
-  var DATA_URL = 'https://raw.githubusercontent.com/mykytatitar-rgb/invest/data/data.enc.json';
-  var README_URL = 'https://github.com/mykytatitar-rgb/invest#readme';
-  var ACTIONS_URL = 'https://github.com/mykytatitar-rgb/invest/actions/workflows/update-data.yml';
+  var DATA_URL = 'https://raw.githubusercontent.com/portfel-mykyta/portfel-mykyta.github.io/data/data.enc.json';
+  var README_URL = 'https://github.com/portfel-mykyta/portfel-mykyta.github.io#readme';
+  var ACTIONS_URL = 'https://github.com/portfel-mykyta/portfel-mykyta.github.io/actions/workflows/update-data.yml';
   var LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   var SRC = (LOCAL && new URLSearchParams(location.search).get('src')) || DATA_URL;
   var K = {

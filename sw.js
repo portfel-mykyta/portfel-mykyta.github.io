@@ -2,11 +2,11 @@
 
    Сторінка, код і дані беруться з мережі (з обмеженням часу), кеш лише запасний
    варіант. Тож нова версія приходить з першим відкриттям, номери версій піднімати
-   не треба. Діє лише в межах /invest/: інші застосунки на цьому домені мають свої. */
+   не треба. */
 
 var CACHE = 'portfel-v2';
 var DATA_HOST = 'raw.githubusercontent.com';
-var DATA_PATH = '/mykytatitar-rgb/invest/data/';
+var DATA_PATH = '/portfel-mykyta/portfel-mykyta.github.io/data/';
 
 var SHELL = [
   './',
