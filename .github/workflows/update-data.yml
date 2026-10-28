@@ -6,6 +6,7 @@
 #   IBKR_FLEX_TOKEN     токен Flex Web Service з IBKR
 #   IBKR_FLEX_QUERY_ID  номер звіту Flex (Query ID)
 #   INVEST_PASSWORD     пароль, яким шифруються дані; його ж вводиш у застосунку
+#   INVEST_PASSWORD_OLD лише коли міняєш пароль: старий пароль, щоб не втратити історію
 # Поки секретів немає, запуск просто пропускається. Покроково: README.md.
 
 name: Портфель, оновити дані
@@ -52,6 +53,7 @@ jobs:
           IBKR_FLEX_TOKEN: ${{ secrets.IBKR_FLEX_TOKEN }}
           IBKR_FLEX_QUERY_ID: ${{ secrets.IBKR_FLEX_QUERY_ID }}
           INVEST_PASSWORD: ${{ secrets.INVEST_PASSWORD }}
+          INVEST_PASSWORD_OLD: ${{ secrets.INVEST_PASSWORD_OLD }}   # лише на час зміни пароля
         run: '"$RUNNER_TEMP/venv/bin/python" src/tools/update_data.py --prev prev.enc.json --out out/data.enc.json'
 
       - name: Публікація в гілку data

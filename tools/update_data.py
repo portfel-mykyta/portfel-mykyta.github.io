@@ -577,15 +577,32 @@ def main():
     if len(password) < 8:
         fail('Секрет INVEST_PASSWORD не задано або він коротший за 8 символів.')
 
+    # Історія старша за рік є лише в попередньому файлі (звіт IBKR дає максимум 365 днів),
+    # тому якщо він не розшифровується, зупиняємось, а не починаємо мовчки з нуля.
     prev, salt = None, None
     if args.prev and os.path.exists(args.prev) and os.path.getsize(args.prev) > 0:
         try:
             with open(args.prev, encoding='utf-8') as f:
-                prev, salt = decrypt(json.load(f), password)
-            log('Попередні дані: розшифровано, %d днів історії.' % len(prev.get('history', [])))
+                env = json.load(f)
+        except ValueError:
+            fail('Збережений файл даних пошкоджений. Почати історію з нуля: видали гілку data.')
+        if env.get('format') != 'portfel-enc':
+            fail('Збережений файл даних має невідомий формат. Почати історію з нуля: видали гілку data.')
+        try:
+            prev, salt = decrypt(env, password)
         except Exception:
-            log('Попередні дані не розшифрувались (мабуть, змінився пароль). Історію почну заново зі звіту IBKR.')
-            prev, salt = None, None
+            old = os.environ.get('INVEST_PASSWORD_OLD', '')
+            if not old:
+                fail('Збережені дані не розшифровуються паролем INVEST_PASSWORD: мабуть, його змінили. '
+                     'Щоб не втратити історію, додай старий пароль у секрет INVEST_PASSWORD_OLD і запусти ще раз. '
+                     'Почати історію з нуля: видали гілку data.')
+            try:
+                prev, _ = decrypt(env, old)
+            except Exception:
+                fail('Збережені дані не розшифровуються ні INVEST_PASSWORD, ні INVEST_PASSWORD_OLD. Перевір обидва секрети.')
+            salt = None   # новий пароль: нова сіль
+            log('Попередні дані відкрито старим паролем, зберігаю під новим. Секрет INVEST_PASSWORD_OLD тепер можна видалити.')
+        log('Попередні дані: розшифровано, %d днів історії.' % len(prev.get('history', [])))
 
     if args.xml:
         with open(args.xml, 'rb') as f:
