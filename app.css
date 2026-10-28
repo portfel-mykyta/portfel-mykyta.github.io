@@ -286,9 +286,10 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   border-radius: var(--r-l);
   background: var(--card); border: 1px solid var(--line);
 }
+/* Візерунок лише в куті: не заходить під цифри й підписи */
 .hero-pattern {
   position: absolute; z-index: -1;
-  width: 330px; height: 330px; right: -150px; top: -150px;
+  width: 260px; height: 260px; right: -134px; top: -134px;
   opacity: var(--g-op); pointer-events: none;
 }
 .hero-pattern path, .lock-pattern path { fill: none; stroke-width: .7; vector-effect: non-scaling-stroke; }
@@ -318,11 +319,12 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 
 .hero-gain-label .money { font-weight: 600; color: var(--ink); }
 
-/* Рахунок у доларах за рік, разом із поповненнями */
-.trend { flex: 1 1 auto; display: grid; grid-template-rows: auto minmax(92px, 1fr) auto; gap: 8px; }
+/* Рахунок у доларах за всю історію, разом із поповненнями */
+.trend { flex: 1 1 auto; display: grid; grid-template-rows: auto minmax(92px, 1fr); gap: 8px; }
 .trend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .trend-title { font-size: 13px; color: var(--ink-2); }
-.trend-delta { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.dep-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); }
 .spark { position: relative; min-height: 92px; touch-action: pan-y; border-radius: 6px; outline-offset: 4px; }
 .spark svg, .chart svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: visible; }
 .spark .sp-area { fill: var(--accent); opacity: .1; }
@@ -331,8 +333,6 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .spark .sp-dep { fill: var(--up); stroke: var(--card); stroke-width: 2; }
 .spark .sp-end { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
 .spark .rule { stroke: var(--line-2); stroke-width: 1; }
-.trend-note { font-size: 13px; color: var(--ink-2); }
-.trend-note .money { color: var(--ink); font-weight: 600; }
 .day { font-size: 13px; color: var(--ink-2); padding-top: 12px; border-top: 1px solid var(--line); }
 .day b { font-weight: 600; }
 .up-t { color: var(--up); }
@@ -412,6 +412,9 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .pos-pnl span { font-weight: 600; }
 .pos-pnl.up span, .pos-pnl.up small { color: var(--up); }
 .pos-pnl.down span, .pos-pnl.down small { color: var(--down); }
+.pos.total { border-top-color: var(--line-2); }
+.pos.total .pos-row { cursor: default; }
+.pos.total .pos-row:hover { background: transparent; }
 .pos-more { padding: 2px 8px 14px 34px; }
 .pos-more dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px 16px; margin: 0; }
 .pos-more dt { font-size: 12.5px; color: var(--muted); }
@@ -434,6 +437,35 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .fact-title { font-weight: 600; font-size: 15.5px; line-height: 1.3; margin-bottom: 3px; }
 .fact-text { color: var(--ink-2); font-size: 14px; }
 .fact-text b { color: var(--ink); font-weight: 600; }
+
+/* ---------- Що всередині ---------- */
+.inside { grid-column: 1 / -1; }
+.head-title { display: grid; gap: 2px; }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+.legend li { display: inline-flex; align-items: center; gap: 7px; }
+.legend .mk-tick { position: static; display: inline-block; width: 2px; height: 14px; }
+.inside-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 44px; align-items: start; }
+.inside-col { display: grid; gap: 8px; min-width: 0; }
+.inside-h { font-size: 15px; font-weight: 600; }
+.inside-lead { font-size: 14px; color: var(--ink-2); margin-bottom: 4px; }
+.inside-lead b { color: var(--ink); font-weight: 600; }
+.lt-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.lt-row {
+  display: grid; grid-template-columns: minmax(7.5rem, 11rem) minmax(0, 1fr) 4.8rem; align-items: center; column-gap: 14px;
+  padding: 7px 4px; border-radius: 8px; outline-offset: 0;
+}
+.lt-row:hover, .lt-row:focus-visible { background: var(--accent-soft); }
+.lt-name { font-size: 14px; line-height: 1.25; }
+/* Смуга росте від лівої лінії; кінець заокруглений, сегменти розділені 2px */
+.lt-track { position: relative; height: 22px; display: flex; align-items: center; border-left: 1px solid var(--line-2); }
+.lt-bar { display: flex; gap: 2px; height: 14px; min-width: 2px; border-radius: 0 4px 4px 0; overflow: hidden; }
+.lt-bar i { display: block; min-width: 2px; }
+.mk-tick { position: absolute; top: 1px; bottom: 1px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--ink); box-shadow: 0 0 0 1px var(--card); }
+.lt-val { display: grid; justify-items: end; text-align: right; font-variant-numeric: tabular-nums; }
+.lt-val b { font-weight: 600; font-size: 14px; }
+.lt-val small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+#insideTable tr.grp th { text-align: left; padding: 14px 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+#insideTable tbody tr.grp:first-child th { padding-top: 2px; }
 
 /* ---------- Розвиток портфеля ---------- */
 .growth { grid-column: 1 / -1; }
@@ -522,7 +554,9 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow-pop); font-size: 13px; font-variant-numeric: tabular-nums;
 }
+.tip { max-width: 320px; }
 .tip-head { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.tip-sub { color: var(--ink-2); font-size: 12.5px; margin-bottom: 4px; }
 .tip-row { display: flex; align-items: center; gap: 8px; }
 .tip-row b { font-weight: 600; }
 .tip-row span { color: var(--ink-2); }
@@ -555,6 +589,7 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 }
 @media (max-width: 899px) {
   .hero, .market, .ops, .learn { grid-column: 1 / -1; }
+  .inside-body { grid-template-columns: minmax(0, 1fr); gap: 22px; }
   .growth-body { grid-template-columns: minmax(0, 1fr); }
   .growth-main { display: contents; }
   .gchart { height: 240px; order: 1; }
@@ -577,8 +612,11 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .notices { padding: 0 16px; }
   .grid { padding: 8px 16px calc(32px + var(--safe-b)); }
   .hero { padding: 22px 18px 16px; gap: 18px; border-radius: 20px; }
-  .hero-pattern { width: 280px; height: 280px; right: -140px; top: -140px; }
-  .trend { grid-template-rows: auto minmax(80px, 1fr) auto; }
+  .hero-pattern { width: 240px; height: 240px; right: -124px; top: -124px; }
+  .trend { grid-template-rows: auto minmax(80px, 1fr); }
+  .lt-row { grid-template-columns: minmax(5.4rem, 7.4rem) minmax(0, 1fr) 4.4rem; column-gap: 10px; padding: 7px 2px; }
+  .lt-name { font-size: 13.5px; }
+  .legend { gap: 6px 12px; font-size: 12.5px; }
   .spark { min-height: 80px; }
   .hero-num { font-size: clamp(46px, 14vw, 60px); }
   .panel-head { gap: 10px; }
@@ -606,8 +644,29 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .duel-num { font-size: 22px; }
 }
 
+/* Встановлений застосунок на комп'ютері: шапка займає рядок заголовка вікна
+   (Window Controls Overlay). Кнопки вікна малює система праворуч чи ліворуч,
+   тому шапка займає рівно вільну частину рядка, а тягнути вікно можна за неї. */
+@media (display-mode: window-controls-overlay) {
+  .bar { -webkit-app-region: drag; app-region: drag; padding-top: 0; }
+  .bar-in {
+    max-width: none; height: env(titlebar-area-height, 33px);
+    width: env(titlebar-area-width, 100%); margin: 0 0 0 env(titlebar-area-x, 0px);
+    padding: 0 6px 0 14px; gap: 10px;
+  }
+  .bar a, .bar button, .bar .menu { -webkit-app-region: no-drag; app-region: no-drag; }
+  .brand { gap: 8px; }
+  .brand-mark { width: 20px; height: 20px; }
+  .brand-name { font-size: 14px; font-weight: 600; }
+  .fresh { font-size: 12px; }
+  .bar-actions { gap: 2px; }
+  .bar .icon-btn { width: 34px; height: calc(env(titlebar-area-height, 33px) - 4px); border-radius: 8px; }
+  .bar .icon-btn .ic { width: 17px; height: 17px; }
+  .bar .install { display: none; }
+}
+
 @media (forced-colors: active) {
-  .alloc i, .pdot, .key-line { forced-color-adjust: none; }
+  .alloc i, .pdot, .key-line, .lt-bar i, .mk-tick, .dep-dot { forced-color-adjust: none; }
 }
 @media print {
   .bar, .notices, .tableview, .about-actions { display: none !important; }

@@ -98,18 +98,17 @@
         <h1 class="sr-only" id="heroTitle">Скільки зараз на рахунку</h1>
         <p class="hero-num money" id="navNum">$0.00</p>
         <p class="hero-uah money" id="navUah" hidden></p>
-        <p class="hero-gain">
+        <p class="hero-gain" id="heroGain">
           <span class="pill" id="gainPill"><i class="tri" aria-hidden="true"></i><span class="money" id="gainAbs"></span><span id="gainPct"></span></span>
           <span class="hero-gain-label" id="gainLabel"></span>
         </p>
       </div>
       <div class="trend" id="trend">
         <div class="trend-head">
-          <p class="trend-title" id="trendTitle">Рахунок за рік</p>
-          <p class="trend-delta" id="trendDelta"></p>
+          <p class="trend-title" id="trendTitle">Рахунок за весь час</p>
+          <p class="trend-key" id="trendKey"><i class="dep-dot" aria-hidden="true"></i>поповнення</p>
         </div>
         <div class="spark" id="spark" tabindex="0" role="img"></div>
-        <p class="trend-note" id="trendNote"></p>
       </div>
       <p class="day" id="dayLine"></p>
     </section>
@@ -150,6 +149,38 @@
     <section class="facts" id="facts" aria-labelledby="factsTitle">
       <h2 id="factsTitle">Варто знати</h2>
       <ul class="fact-list" id="factList"></ul>
+    </section>
+
+    <section class="panel inside" id="inside" aria-labelledby="insideTitle" hidden>
+      <div class="panel-head">
+        <div class="head-title">
+          <h2 id="insideTitle">Що всередині</h2>
+          <p class="panel-meta">Компанії й сектори разом із тими, що в твоїх фондах</p>
+        </div>
+        <ul class="legend" id="insideLegend" aria-label="Легенда"></ul>
+      </div>
+      <div class="inside-body">
+        <div class="inside-col">
+          <h3 class="inside-h">Компанії</h3>
+          <p class="inside-lead" id="coLead"></p>
+          <ul class="lt-list" id="coList"></ul>
+        </div>
+        <div class="inside-col">
+          <h3 class="inside-h">Сектори</h3>
+          <p class="inside-lead" id="secLead"></p>
+          <ul class="lt-list" id="secList"></ul>
+        </div>
+      </div>
+      <details class="tableview">
+        <summary>Те саме таблицею</summary>
+        <div class="table-wrap">
+          <table class="tbl" id="insideTable">
+            <thead><tr><th scope="col">Назва</th><th scope="col">У тебе</th><th scope="col">Напряму</th><th scope="col">Через фонди</th><th scope="col">У ринку</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+      <p class="note" id="insideNote"></p>
     </section>
 
     <section class="panel growth" id="growth" aria-labelledby="growthTitle">
@@ -217,7 +248,7 @@
         <summary><span class="fold-title">Звідки дані</span><span class="fold-meta" id="aboutMeta"></span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev"></use></svg></summary>
         <div class="about">
           <p id="aboutText"></p>
-          <p>Частки компаній у S&amp;P 500 взято зі Slickcharts станом на 27 жовтня 2026.</p>
+          <p>Частки компаній у S&amp;P 500: Slickcharts, 27 жовтня 2026. Сектори: оцінка ChartRow за складом фонду SPY, 26 жовтня 2026.</p>
           <div class="about-actions">
             <a class="btn ghost" href="https://github.com/portfel-mykyta/portfel-mykyta.github.io#readme" target="_blank" rel="noopener">Інструкція з налаштування</a>
             <button class="btn ghost" id="forgetBtn" type="button">Забути пароль на цьому пристрої</button>
