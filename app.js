@@ -690,23 +690,10 @@
     var n = m.rows.length;
     $('holdMeta').textContent = n + ' ' + plural(n, ['позиція', 'позиції', 'позицій']) + (m.other > 0.004 ? ' і гроші' : '');
 
-    // Смуга розподілу
-    var alloc = $('alloc');
-    alloc.replaceChildren();
+    // Кільце розподілу: кольори ті самі, що в списку поруч, він же і легенда
     var parts = m.rows.map(function (r) { return { key: r.sym, label: r.title, value: r.value, share: r.share, color: colorOf(r.slot) }; });
     if (m.other > 0.004) parts.push({ key: 'CASH', label: 'Гроші на рахунку', value: m.other, share: m.nav ? m.other / m.nav : 0, color: 'var(--c-cash)' });
-    parts.forEach(function (p) {
-      if (!(p.value > 0)) return;
-      var seg = h('i', { 'data-key': p.key, tabindex: '-1' });
-      seg.style.flexGrow = String(p.value);
-      seg.style.background = p.color;
-      seg.addEventListener('pointerenter', function (e) { hot(p.key); tipShow(e.clientX, e.clientY, [[null, p.label], [p.color, usd(p.value), pct(p.share) + ' рахунку']]); });
-      seg.addEventListener('pointermove', function (e) { tipMove(e.clientX, e.clientY); });
-      seg.addEventListener('pointerleave', function () { hot(null); tipHide(); });
-      seg.addEventListener('click', function () { toggleRow(p.key, true); });
-      alloc.append(seg);
-    });
-    alloc.setAttribute('aria-label', 'Розподіл рахунку: ' + parts.map(function (p) { return p.label + ' ' + pct(p.share); }).join(', '));
+    drawDonut($('donut'), parts.filter(function (p) { return p.value > 0; }), m);
 
     // Список
     var list = $('posList');
@@ -864,11 +851,57 @@
       list.append(li);
     });
   }
+  // Сегмент кільця від кута a0 до a1 (радіани від 12-ї години за годинниковою стрілкою)
+  function ringPath(c, r0, r1, a0, a1) {
+    if (a1 - a0 >= Math.PI * 2 - 1e-6) return ringPath(c, r0, r1, a0, a0 + Math.PI) + ringPath(c, r0, r1, a0 + Math.PI, a1);
+    var pt = function (r, a) { return (c + r * Math.sin(a)).toFixed(2) + ' ' + (c - r * Math.cos(a)).toFixed(2); };
+    var big = a1 - a0 > Math.PI ? 1 : 0;
+    return 'M' + pt(r1, a0) + 'A' + r1 + ' ' + r1 + ' 0 ' + big + ' 1 ' + pt(r1, a1) +
+      'L' + pt(r0, a1) + 'A' + r0 + ' ' + r0 + ' 0 ' + big + ' 0 ' + pt(r0, a0) + 'Z';
+  }
+  var donutState = null;
+  function drawDonut(box, parts, m) {
+    box.replaceChildren();
+    donutState = null;
+    var total = sum(parts, function (p) { return p.value; });
+    if (!(total > 0)) return;
+    var S = 200, c = S / 2, r1 = c - 2, r0 = Math.round(c * 0.66);
+    var svg = sv('svg', { viewBox: '0 0 ' + S + ' ' + S, 'aria-hidden': 'true' });
+    var a = 0;
+    parts.forEach(function (p) {
+      var da = p.value / total * Math.PI * 2;
+      var path = sv('path', { class: 'slice', 'data-key': p.key, d: ringPath(c, r0, r1, a, a + da) });
+      path.style.fill = p.color;
+      path.addEventListener('pointerenter', function (e) { hot(p.key); tipShow(e.clientX, e.clientY, [[null, p.label], [p.color, usd(p.value), pct(p.share) + ' рахунку']]); });
+      path.addEventListener('pointermove', function (e) { tipMove(e.clientX, e.clientY); });
+      path.addEventListener('pointerleave', function () { hot(null); tipHide(); });
+      path.addEventListener('click', function () { toggleRow(p.key, true); });
+      svg.appendChild(path);
+      a += da;
+    });
+    var num = sv('text', { class: 'd-num', x: c, y: c + 2, 'text-anchor': 'middle' });
+    var lab = sv('text', { class: 'd-lab', x: c, y: c + 22, 'text-anchor': 'middle' });
+    svg.appendChild(num); svg.appendChild(lab);
+    box.appendChild(svg);
+    box.setAttribute('aria-label', 'Розподіл рахунку: ' + parts.map(function (p) { return p.label + ' ' + pct(p.share); }).join(', '));
+    donutState = { num: num, lab: lab, parts: parts, nav: m.nav };
+    donutCenter(null);
+  }
+  // У центрі кільця: увесь рахунок або частка того, на що наведено
+  function donutCenter(key) {
+    if (!donutState) return;
+    var p = key ? donutState.parts.filter(function (x) { return x.key === key; })[0] : null;
+    donutState.num.textContent = p ? pct(p.share) : usd(donutState.nav);
+    donutState.num.setAttribute('class', 'd-num' + (p ? '' : ' money'));
+    var name = p ? p.label : 'на рахунку';
+    donutState.lab.textContent = name.length > 18 ? name.slice(0, 17) + '…' : name;
+  }
   function colorOf(slot) { return slot ? 'var(--c' + slot + ')' : 'var(--mkt)'; }
   function hot(key) {
-    var alloc = $('alloc');
-    alloc.classList.toggle('hot', !!key);
-    Array.prototype.forEach.call(alloc.children, function (seg) { seg.classList.toggle('on', seg.getAttribute('data-key') === key); });
+    var dn = $('donut');
+    dn.classList.toggle('hot', !!key);
+    Array.prototype.forEach.call(dn.querySelectorAll('.slice'), function (s) { s.classList.toggle('on', s.getAttribute('data-key') === key); });
+    donutCenter(key);
     Array.prototype.forEach.call($('posList').children, function (li) { li.classList.toggle('hot', li.getAttribute('data-key') === key); });
   }
   function posItem(r, m) {
@@ -885,6 +918,8 @@
     var li = h('li', { class: 'pos', 'data-key': r.sym }, row, more);
     row.addEventListener('click', function () { toggleRow(r.sym); });
     row.addEventListener('pointerenter', function () { hot(r.sym); });
+    row.addEventListener('focus', function () { hot(r.sym); });
+    row.addEventListener('blur', function () { hot(null); });
     row.addEventListener('pointerleave', function () { hot(null); });
     if (state.openRows[r.sym]) { more.hidden = false; row.setAttribute('aria-expanded', 'true'); }
     return li;
@@ -914,7 +949,10 @@
       h('span', { class: 'pos-name' }, h('b', { text: 'Гроші на рахунку' }), h('small', null, m.accrued > 0.004 ? money(sub) : sub)),
       h('span', { class: 'pos-val' }, money(usd(m.other)), h('small', { text: pct(m.nav ? m.other / m.nav : null) })),
       h('span', { class: 'pos-pnl' }));
-    return h('li', { class: 'pos', 'data-key': 'CASH' }, row);
+    var li = h('li', { class: 'pos', 'data-key': 'CASH' }, row);
+    li.addEventListener('pointerenter', function () { hot('CASH'); });
+    li.addEventListener('pointerleave', function () { hot(null); });
+    return li;
   }
   function toggleRow(key, reveal) {
     var li = $('posList').querySelector('[data-key="' + key + '"]');
