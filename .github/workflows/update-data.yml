@@ -16,6 +16,11 @@ on:
     - cron: '17 5 * * 2-6'    # вт–сб, 07:17 / 08:17 за Києвом: звіт за вчорашнє закриття біржі
     - cron: '47 10 * * 2-6'   # другий запуск, якщо зранку IBKR ще не був готовий
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Дозавантажити попередні роки, аж до відкриття рахунку (досить одного разу)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,7 +59,8 @@ jobs:
           IBKR_FLEX_QUERY_ID: ${{ secrets.IBKR_FLEX_QUERY_ID }}
           INVEST_PASSWORD: ${{ secrets.INVEST_PASSWORD }}
           INVEST_PASSWORD_OLD: ${{ secrets.INVEST_PASSWORD_OLD }}   # лише на час зміни пароля
-        run: '"$RUNNER_TEMP/venv/bin/python" src/tools/update_data.py --prev prev.enc.json --out out/data.enc.json'
+          BACKFILL: ${{ inputs.backfill && '--backfill' || '' }}
+        run: '"$RUNNER_TEMP/venv/bin/python" src/tools/update_data.py --prev prev.enc.json --out out/data.enc.json $BACKFILL'
 
       - name: Публікація в гілку data
         env:

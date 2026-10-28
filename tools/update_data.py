@@ -95,9 +95,13 @@ def _child_text(el, tag):
     return c.text.strip() if c is not None and c.text else ''
 
 
-def flex_download(token, query_id, max_wait=300):
-    """Двокроковий запит Flex: SendRequest дає номер звіту, GetStatement віддає сам звіт."""
-    q = urllib.parse.urlencode({'t': token, 'q': query_id, 'v': '3'})
+def flex_download(token, query_id, max_wait=300, fd=None, td=None):
+    """Двокроковий запит Flex: SendRequest дає номер звіту, GetStatement віддає сам звіт.
+    fd і td (у форматі 20250131) замінюють період зі звіту на свої дати, не довше 365 днів."""
+    params = {'t': token, 'q': query_id, 'v': '3'}
+    if fd and td:
+        params.update(fd=fd, td=td)
+    q = urllib.parse.urlencode(params)
     first = ET.fromstring(http_get(FLEX_SEND + '?' + q, ua='Java'))
     if _child_text(first, 'Status') != 'Success':
         raise FlexError(_child_text(first, 'ErrorCode') or '?', _child_text(first, 'ErrorMessage'))
@@ -441,9 +445,58 @@ def rebuild_snaps(stmt, missing, prices):
     return out
 
 
-def build(stmt, prev, bench, uah, now, prices=None):
+def backfill(token, query, stmt, max_windows=10, pause=12, fetch=None):
+    """Дозавантажує звіти Flex за попередні роки, по 365 днів назад без проміжків, поки не дійде
+    до відкриття рахунку, і дописує їх у stmt (дні, угоди, рух грошей). Позиції лишаються сьогоднішні:
+    з них кількість паперів у минулому рахується назад за угодами.
+    Повертає True, якщо знайдено день відкриття (тобто історія тепер повна)."""
+    fetch = fetch or (lambda fd, td: flex_download(token, query, fd=fd, td=td))
+    first = min(stmt['nav']) if stmt['nav'] else stmt['from']
+    end = datetime.fromisoformat(first).date() - timedelta(days=1)
+    for _ in range(max_windows):
+        start = end - timedelta(days=364)
+        time.sleep(pause)                           # ліміт IBKR: до 10 запитів на хвилину
+        try:
+            older = parse_flex(fetch(start.strftime('%Y%m%d'), end.strftime('%Y%m%d')))
+        except FlexError as e:
+            log('Звіт за %s…%s: IBKR відповів %s. Далі назад не йду.' % (start, end, e))
+            return False
+        except Exception as e:
+            log('Звіт за %s…%s не отримано (%s). Далі назад не йду.' % (start, end, e))
+            return False
+        days = sorted(older['nav'])
+        k = next((i for i, d in enumerate(days) if older['nav'][d]['total']), None)
+        if k is None:                               # у цьому році рахунку ще не було
+            log('Звіт за %s…%s порожній: рахунок відкрито пізніше.' % (start, end))
+            return True
+        for d in days[k:]:
+            stmt['nav'].setdefault(d, older['nav'][d])
+        stmt['trades'].extend(t for t in older['trades'] if t['d'] and t['d'] >= days[k])
+        stmt['cash'].extend(c for c in older['cash'] if c['d'] and c['d'] >= start.isoformat())
+        stmt['from'] = start.isoformat()
+        log('Звіт за %s…%s: %d днів, %d угод.' % (start, end, len(days) - k, len(older['trades'])))
+        if (datetime.fromisoformat(days[k]).date() - start).days > 7:
+            log('Рахунок відкрито %s: історія тепер повна.' % days[k])
+            return True
+        end = start - timedelta(days=1)
+    return False
+
+
+def _years_back(day, now):
+    """Скільки років цін треба з Yahoo, щоб дістати до дати day."""
+    years = (now.date() - datetime.fromisoformat(day).date()).days / 365.25
+    return '2y' if years < 1.8 else '5y' if years < 4.8 else '10y' if years < 9.8 else 'max'
+
+
+def build(stmt, prev, bench, uah, now, prices=None, full=None):
     prev = prev or {}
     start = stmt['from']
+
+    # Дні до першого поповнення (рахунок порожній) не потрібні: з них не порахувати дохідність
+    days = sorted(stmt['nav'])
+    k = next((i for i, d in enumerate(days) if stmt['nav'][d]['total']), len(days))
+    for d in days[:k]:
+        del stmt['nav'][d]
 
     # Поповнення й виведення по днях; вихідний день переносимо на найближчий торговий
     flows = defaultdict(float)
@@ -513,8 +566,12 @@ def build(stmt, prev, bench, uah, now, prices=None):
             if sym not in order:
                 order.append(sym)
 
+    # full: історія починається з дня відкриття рахунку (тоді «за весь час» означає справді весь час)
+    if full is None:
+        full = bool(prev.get('full'))
     return {
         'v': SCHEMA, 'source': 'ibkr-flex', 'generated': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'full': bool(full), 'since': history[0][0] if history else as_of,
         'asOf': as_of, 'base': 'USD', 'nav': round(nav, 4),
         'cash': round(cash, 4) if cash is not None else None,
         'positions': positions, 'history': history, 'bench': bench_obj,
@@ -566,6 +623,8 @@ def main():
     ap.add_argument('--xml', help='готовий звіт Flex з файлу замість завантаження з IBKR')
     ap.add_argument('--offline', action='store_true', help='не брати ціни ринку й курс з мережі')
     ap.add_argument('--plain-out', help='для перевірки: записати ще й відкритий JSON (не в GitHub Actions)')
+    ap.add_argument('--backfill', action='store_true',
+                    help='дозавантажити звіти за попередні роки, аж до відкриття рахунку (робиться один раз)')
     args = ap.parse_args()
 
     token, query = os.environ.get('IBKR_FLEX_TOKEN', '').strip(), os.environ.get('IBKR_FLEX_QUERY_ID', '').strip()
@@ -627,9 +686,22 @@ def main():
     if not stmt['nav'] and not stmt['positions']:
         fail('У звіті немає ні вартості рахунку, ні позицій. Додай розділи Net Asset Value (NAV) in Base і Open Positions.')
 
+    # Рахунок відкрито в межах цього звіту: тоді історія повна й без дозавантаження
+    full = None
+    funded = sorted(d for d, r in stmt['nav'].items() if r['total'])
+    if funded and stmt['from'] and (datetime.fromisoformat(funded[0]) - datetime.fromisoformat(stmt['from'])).days > 7:
+        full = True
+    if args.backfill:
+        if args.xml or not token:
+            fail('Дозавантаження попередніх років працює лише зі звітом з IBKR (потрібен токен).')
+        log('Дозавантажую попередні роки, по 365 днів за раз…')
+        full = backfill(token, query, stmt) or full
+
+    now = datetime.now(timezone.utc)
+    oldest = min(list(stmt['nav']) + [r[0] for r in (prev or {}).get('history', [])[:1]] or [now.date().isoformat()])
     bench, uah, prices = None, None, {}
     if not args.offline:
-        bench = fetch_yahoo(BENCH) or fetch_stooq(BENCH)
+        bench = fetch_yahoo(BENCH, rng=_years_back(oldest, now)) or fetch_stooq(BENCH)
         if not bench:
             log('Ринок: нових цін немає, лишаю попередні.')
         try:
@@ -640,11 +712,11 @@ def main():
         if missing:
             log('Вартість активів: відновлюю %d закриттів без запису.' % len(missing))
             for sym, exch in need.items():
-                got = fetch_yahoo(yahoo_ticker(sym, exch), rng='2y', adjusted=False)
+                got = fetch_yahoo(yahoo_ticker(sym, exch), rng=_years_back(missing[0], now), adjusted=False)
                 if got:
                     prices[sym] = got[0]
 
-    data = build(stmt, prev, bench, uah, datetime.now(timezone.utc), prices)
+    data = build(stmt, prev, bench, uah, now, prices, full)
     env = encrypt(data, password, salt)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as f:
