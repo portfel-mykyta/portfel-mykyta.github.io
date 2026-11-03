@@ -885,6 +885,8 @@ a { color: var(--accent); }
     ready: ready,
     actionRow: function (o, label) { return actionRow(o, 'ext:' + orderKey(o), label); },
     onChange: function (fn) { S.extRender = fn; },
+    create: function (o) { return runCreate(o, 'ext:' + orderKey(o), true); },
+    isDone: function (o) { var st = S.done['ext:' + orderKey(o)]; return !!(st && (st.ok || st.busy)); },
     priceText: function (o) {
       var px = S.prices[String(o.conid)];
       if (!px) { priceOf(o.conid, o.exch).then(function () { if (S.extRender) S.extRender(); }).catch(function () { /* без ціни */ }); return 'ціну уточнюю…'; }

@@ -534,6 +534,7 @@
     renderHoldings(m);
     renderFacts(m);
     renderInside(m);
+    renderDeposit(m);
     renderPlan(m);
     renderGrowth(m);
     renderOps(m);
@@ -1150,6 +1151,104 @@
       ic: 'i-gift', tone: 'up', title: 'Дивіденди цього року: ' + usd(m.divYtd),
       text: [m.taxYtd ? 'Після податку США лишилось ' + usd(net) + '. ' : '', 'В Україні з них ще треба сплатити 9% ПДФО і 5% військового збору.']
     };
+  }
+
+
+  /* ---------- Поповнення: IBKR → TransferGo → заявки ---------- */
+  // Реквізити й стан переказу лежать лише на цьому пристрої. Гроші переказує і підтверджує власник.
+  var TRANSFERGO_URL = 'https://www.transfergo.com/';
+  var depDraft = null;   // недозбережені реквізити переживають перемальовування
+  function depState() { try { return JSON.parse(store.get('portfel.deposit') || '{}') || {}; } catch (e) { return {}; } }
+  function depSave(d) { store.set('portfel.deposit', JSON.stringify(d)); }
+  function wireLines() {
+    return String(store.get('portfel.wire') || '').split(/\n+/).map(function (l) {
+      var i = l.indexOf(':');
+      return i > 0 ? { k: l.slice(0, i).trim(), v: l.slice(i + 1).trim() } : { k: '', v: l.trim() };
+    }).filter(function (x) { return x.v; });
+  }
+  function copyBtn(text) {
+    var b = h('button', { class: 'btn ghost', type: 'button', text: 'Копіювати' });
+    b.addEventListener('click', function () {
+      var done = function () { b.textContent = 'Скопійовано'; setTimeout(function () { b.textContent = 'Копіювати'; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { toast('Не вдалося скопіювати: виділи текст вручну'); });
+      else toast('Виділи текст і скопіюй вручну');
+    });
+    return b;
+  }
+  function renderDeposit(m) {
+    var sec = $('deposit');
+    sec.hidden = false;
+    var d = depState();
+    var amount = d.amount || planSettings().amount;
+    var box = $('depBody');
+    box.replaceChildren();
+    var amt = h('input', { id: 'depAmt', type: 'number', inputmode: 'decimal', min: '1', step: '1', value: String(amount) });
+    amt.addEventListener('change', function () {
+      var v = Number(String(amt.value).replace(',', '.'));
+      if (v > 0) { d.amount = Math.round(v * 100) / 100; depSave(d); store.set(K.planAmt, String(d.amount)); renderPlan(state.m); renderDeposit(state.m); }
+    });
+    box.append(h('div', { class: 'dep-top' },
+      h('label', { class: 'field' }, h('span', { text: 'Сума поповнення, $' }), amt),
+      d.sentAt ? h('button', { class: 'linkish btn ghost', type: 'button', text: 'Почати нове поповнення', onclick: function () { depSave({ amount: amount, auto: d.auto }); renderDeposit(state.m); } }) : null));
+
+    var steps = h('ol', { class: 'dep-steps' });
+    // 1. Повідомлення про депозит в IBKR: так IBKR дає реквізити й чекає гроші
+    steps.append(h('li', { class: d.notified ? 'done' : '' },
+      h('p', { class: 'dep-h', text: 'Повідом IBKR про депозит' }),
+      h('p', { class: 'dep-txt', text: 'Transfer & Pay → Transfer Funds → Make a Deposit → USD → Bank Wire, сума ' + usd(amount) + ' → Get Transfer Instructions. IBKR покаже реквізити, на які слати гроші.' }),
+      h('div', { class: 'dep-row' },
+        h('a', { class: 'btn primary', href: DEPOSIT_URL, target: '_blank', rel: 'noopener', onclick: function () { d.notified = Date.now(); d.amount = amount; depSave(d); setTimeout(function () { renderDeposit(state.m); }, 300); } }, 'Відкрити IBKR', icon('i-out')))));
+
+    // 2. Переказ через TransferGo на реквізити IBKR
+    var lines = wireLines();
+    var li2 = h('li', { class: d.sentAt ? 'done' : '' },
+      h('p', { class: 'dep-h', text: 'Переказ через TransferGo' }),
+      h('p', { class: 'dep-txt', text: 'Отримувач і рахунок з кроку 1. У призначенні платежу обов\'язково номер твого рахунку IBKR, інакше гроші можуть повернути.' }));
+    var copy = h('ul', { class: 'dep-copy' });
+    copy.append(h('li', null, h('span', { text: 'Сума' }), h('b', { text: String(amount) + ' USD' }), copyBtn(String(amount))));
+    lines.forEach(function (x) { copy.append(h('li', null, h('span', { text: x.k || 'Реквізит' }), h('b', { text: x.v }), copyBtn(x.v))); });
+    li2.append(copy);
+    var ta = h('textarea', { class: 'dep-wire', id: 'depWire', placeholder: 'Встав сюди реквізити з IBKR, по рядку на кожен: Beneficiary: …\nAccount / IBAN: …\nSWIFT: …\nReference: номер рахунку U…', 'aria-label': 'Реквізити IBKR' });
+    ta.value = depDraft != null ? depDraft : store.get('portfel.wire') || '';
+    ta.addEventListener('input', function () { depDraft = ta.value; });
+    var det = h('details', null, h('summary', { text: lines.length ? 'Змінити реквізити' : 'Вставити реквізити IBKR (один раз)' }), ta,
+      h('div', { class: 'dep-row' }, h('button', { class: 'btn ghost', type: 'button', text: 'Зберегти на цьому пристрої', onclick: function () { store.set('portfel.wire', ta.value.trim()); depDraft = null; renderDeposit(state.m); } })));
+    if (!lines.length || depDraft != null) det.open = true;
+    li2.append(det);
+    li2.append(h('div', { class: 'dep-row' },
+      h('a', { class: 'btn primary', href: TRANSFERGO_URL, target: '_blank', rel: 'noopener' }, 'Відкрити TransferGo', icon('i-out')),
+      d.sentAt ? h('span', { class: 'dep-txt', text: 'Відправлено ' + new Date(d.sentAt).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) })
+        : h('button', { class: 'btn ghost', type: 'button', text: 'Я відправив переказ', onclick: function () { d.sentAt = Date.now(); d.amount = amount; d.cashBefore = m.cash; if (d.auto == null) d.auto = true; depSave(d); renderDeposit(state.m); } })));
+    steps.append(li2);
+
+    // 3. Гроші на рахунку → заявки за планом
+    var arrived = d.sentAt && ok(m.cash) && m.cash >= (d.cashBefore || 0) + amount * 0.9;
+    var li3 = h('li', { class: arrived ? 'done' : '' },
+      h('p', { class: 'dep-h', text: 'Покупка за планом' }),
+      h('p', { class: 'dep-txt', text: !d.sentAt ? 'Після переказу Портфель стежитиме за вільними грошима на рахунку.'
+        : arrived ? 'Гроші надійшли: ' + usd(m.cash) + ' вільних. Заявки за планом нижче, лишилось відправити їх в IBKR.'
+        : ART ? 'Чекаю гроші: зазвичай 1–3 робочі дні. Відкривай Портфель, і він перевірить рахунок сам.' : 'Чекаю гроші. Стежити за рахунком наживо вміє Портфель у Claude.' }));
+    if (ART) {
+      var cb = h('input', { type: 'checkbox', id: 'depAuto' });
+      cb.checked = d.auto !== false;
+      cb.addEventListener('change', function () { d.auto = cb.checked; depSave(d); });
+      li3.append(h('label', { class: 'check' }, cb, h('span', { text: 'Коли гроші надійдуть, одразу створити заявки за планом' })));
+    }
+    if (arrived) li3.append(h('div', { class: 'dep-row' }, h('a', { class: 'btn primary', href: '#plan', onclick: function (e) { e.preventDefault(); $('plan').scrollIntoView({ behavior: 'smooth' }); } }, 'До заявок')));
+    steps.append(li3);
+    box.append(steps);
+
+    if (ART && arrived && d.auto !== false && !d.autoDone) autoBuy(m, d);
+  }
+  // Автопокупка: лише створює заявки (instructions); відправляє їх власник в IBKR
+  function autoBuy(m, d) {
+    var B = window.PortfelBuy;
+    if (!B || !B.create) return;
+    var P = planModel(m, planSettings());
+    if (!P.orders.length) return;
+    d.autoDone = Date.now(); depSave(d);
+    P.orders.reduce(function (p, o) { return p.then(function () { return B.isDone(o) ? null : B.create(o); }); }, Promise.resolve())
+      .then(function () { drawPlan(state.m); toast('Гроші надійшли: заявки створено, відкрий їх в IBKR і натисни Submit', 6000); });
   }
 
   /* ---------- План поповнення: куди класти нові гроші ---------- */
