@@ -852,3 +852,33 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 section.dragging { opacity: .45; }
 section.drop-before { box-shadow: 0 -3px 0 var(--accent); }
 section.drop-after { box-shadow: 0 3px 0 var(--accent); }
+
+/* Баланс у шапці */
+.bar-nav { display: none; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar-nav.on { display: inline-flex; }
+.bar-nav b { font-size: 18px; font-weight: 650; font-variation-settings: 'SHRP' 100; }
+.bar-nav span { font-size: 13px; }
+@media (max-width: 560px) { .bar-nav.on ~ .fresh { display: none; } .bar-nav b { font-size: 16px; } .bar-nav span { display: none; } }
+/* Картка активу: діапазон, періоди, спідометр */
+.mini-stats { display: grid; gap: 8px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.rng { display: grid; grid-template-columns: auto auto minmax(40px, 1fr) auto; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rng-bar { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--down-soft), var(--line-2), var(--up-soft)); }
+.rng-mk { position: absolute; top: -4px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); }
+.perf { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.perf-c { display: inline-grid; justify-items: start; line-height: 1.15; }
+.perf-c small { font-size: 10.5px; color: var(--muted); }
+.perf-c b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gauge { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.gauge span { display: grid; }
+.gauge small { font-size: 11px; color: var(--muted); }
+.gauge-svg { width: 76px; height: 43px; flex: none; }
+.g-bg, .g-val { fill: none; stroke-width: 8; stroke-linecap: round; }
+.g-bg { stroke: var(--line); }
+.g-val.ok { stroke: var(--up); }
+.g-val.over { stroke: var(--down); }
+.g-tick { stroke: var(--ink-2); stroke-width: 2; }
+.g-needle { stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }
+.g-hub { fill: var(--ink); }
+.mini-note { font-size: 11.5px; color: var(--muted); }
+.mini { align-content: start; }
+.perf { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 4px 6px; }

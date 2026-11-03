@@ -326,7 +326,7 @@
       if (kind === 'stock' && !ABOUT[p.sym] && name === p.sym) about = 'Акція однієї компанії';
       var fund = kind === 'etf' || kind === 'fund';
       return {
-        sym: p.sym, title: fund ? p.sym : name, name: name, about: about, kind: kind, fund: fund,
+        sym: p.sym, conid: p.conid || null, title: fund ? p.sym : name, name: name, about: about, kind: kind, fund: fund,
         qty: p.qty, price: p.price, cur: p.cur || 'USD', value: p.value, cost: p.cost, pnl: p.pnl,
         pnlPct: ok(p.cost) && p.cost > 0 ? p.pnl / p.cost : null,
         share: nav ? p.value / nav : null, slot: slot[p.sym] || 0, exch: p.exch || ''
@@ -507,7 +507,7 @@
       return {
         sym: sym, name: o.name || sym, kind: o.kind || (PP.typeOf(sym, false) === 'stock' ? 'stock' : 'etf'),
         qty: qty, price: Number(p.market_price), value: val, cost: cost, pnl: ok(pnl) ? pnl : val - cost,
-        cur: p.currency || o.cur || 'USD', exch: o.exch || '', isin: o.isin || ''
+        cur: p.currency || o.cur || 'USD', exch: o.exch || '', isin: o.isin || '', conid: p.contract_id || null
       };
     });
     var sm = L.sum || {};
@@ -594,6 +594,11 @@
 
   function renderHero(m) {
     $('navNum').textContent = usd(m.nav);
+    $('barNavNum').textContent = usd(m.nav);
+    var bd = $('barNavDay');
+    bd.replaceChildren();
+    if (m.day && ok(m.day.abs)) { bd.className = m.day.abs >= 0 ? 'up-t' : 'down-t'; bd.append(money(usdS(m.day.abs)), ' ' + pctS(m.day.pct)); }
+    watchHeroNum();
     var uah = m.data.uah;
     var u = $('navUah');
     if (uah && ok(uah.rate)) {
@@ -1545,7 +1550,7 @@
       var dot = h('i', { class: 'pdot' }); dot.style.background = color;
       grid.append(h('article', { class: 'mini' + (row ? '' : ' sold') },
         h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: name })), valEl),
-        subEl, chart, ownEl));
+        subEl, chart, cardStats(k, priceSeries(m, k, '0000'), row && row.conid, row, m), ownEl));
       var c = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, cur: row && row.cur };
       cards.push(c);
       setSub(c, null);
@@ -1565,7 +1570,7 @@
         var dot = h('i', { class: 'pdot' }); dot.style.background = 'var(--mkt)';
         grid.append(h('article', { class: 'mini watch' },
           h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: w.sym }), h('small', { text: PP.BONDS[w.sym] ? 'облігації' : 'спостереження' })), valEl),
-          subEl, chart,
+          subEl, chart, cardStats(w.sym, hist.map(function (x) { return { date: x.date, p: x.p }; }), w.conid, null, m),
           h('span', { class: 'mini-acts' },
             h('button', { class: 'linkish', type: 'button', text: 'Аналіз', onclick: function () { analyze(w.sym, w.name, pts); } }),
             h('button', { class: 'linkish', type: 'button', text: 'Купити', onclick: function () { if (window.PortfelBuy) window.PortfelBuy.buySym(w.sym); $('buy').scrollIntoView({ behavior: 'smooth' }); } }),
@@ -1583,6 +1588,93 @@
     }
     var allDates = Object.keys(dates).sort();
     requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, allDates); }); });
+  }
+
+
+  /* ---------- Баланс у шапці, коли головна картка вже прокручена ---------- */
+  var heroIO = null;
+  function watchHeroNum() {
+    if (heroIO || !window.IntersectionObserver) return;
+    heroIO = new IntersectionObserver(function (es) {
+      var hidden = !es[0].isIntersecting && es[0].boundingClientRect.top < 0;
+      $('barNav').classList.toggle('on', hidden);
+    }, { rootMargin: '-60px 0px 0px 0px' });
+    heroIO.observe($('navNum'));
+  }
+
+  /* ---------- Картка активу: діапазон за рік, зміни за періоди, частка від межі ---------- */
+  var statCache = {};
+  function seriesChange(pts, days) {
+    if (pts.length < 2) return null;
+    var last = pts[pts.length - 1], t = d(last.date).getTime() - days * 864e5, base = null;
+    for (var i = pts.length - 1; i >= 0; i--) { if (d(pts[i].date).getTime() <= t) { base = pts[i]; break; } }
+    return base ? last.p / base.p - 1 : null;
+  }
+  var PERF = [['1Д', 1, 'cumulative-perf-1d'], ['1Т', 7, 'cumulative-perf-1w'], ['1М', 30, 'cumulative-perf-1m'], ['3М', 91, null], ['1Р', 365, 'cumulative-perf-1y'], ['3Р', 1095, 'cumulative-perf-3y'], ['5Р', 1826, 'cumulative-perf-5y']];
+  function cardStats(k, full, conid, row, m) {
+    var box = h('div', { class: 'mini-stats' });
+    var fill = function (snap) {
+      box.replaceChildren();
+      var last = full.length ? full[full.length - 1].p : null;
+      // Діапазон за 52 тижні
+      var yr = full.filter(function (x) { return d(x.date).getTime() >= Date.now() - 365 * 864e5; });
+      var lo = yr.length ? Math.min.apply(null, yr.map(function (x) { return x.p; })) : null;
+      var hi = yr.length ? Math.max.apply(null, yr.map(function (x) { return x.p; })) : null;
+      var ms = snap && snap['misc-statistics'];
+      if (ms && ok(Number(ms.low_52w)) && ok(Number(ms.high_52w))) { lo = Number(ms.low_52w); hi = Number(ms.high_52w); }
+      if (ok(lo) && ok(hi) && hi > lo && ok(last)) {
+        var pos = Math.max(0, Math.min(1, (last - lo) / (hi - lo)));
+        var mk = h('i', { class: 'rng-mk' }); mk.style.left = (pos * 100).toFixed(1) + '%';
+        box.append(h('div', { class: 'rng', title: 'Ціна відносно мінімуму й максимуму за 52 тижні' },
+          h('span', { class: 'rng-l', text: '52 тижні' }),
+          h('span', { class: 'rng-v', text: usd(lo) }),
+          h('span', { class: 'rng-bar' }, mk),
+          h('span', { class: 'rng-v', text: usd(hi) })));
+      }
+      // Зміни за періоди
+      var row2 = h('div', { class: 'perf' });
+      PERF.forEach(function (p) {
+        var v = snap && p[2] && snap[p[2]] && ok(Number(snap[p[2]].change_pct)) ? Number(snap[p[2]].change_pct) / 100 : seriesChange(full, p[1]);
+        if (!ok(v)) return;
+        row2.append(h('span', { class: 'perf-c' }, h('small', { text: p[0] }), h('b', { class: v >= 0.0005 ? 'up-t' : v <= -0.0005 ? 'down-t' : '', text: pctS(v) })));
+      });
+      if (row2.children.length) box.append(row2);
+      var dy = snap && snap['dividend-yield'] && Number(snap['dividend-yield'].yield_pct);
+      // Спідометр: частка окремої акції в рахунку відносно твоєї межі
+      if (row && !row.fund && m) {
+        var st = planSettings(), P = planModel(m, st);
+        var s = P.stocks.filter(function (x) { return x.sym === k; })[0];
+        if (s) box.append(gauge(s.now, st.cap));
+      }
+      if (ok(dy) && dy > 0) box.append(h('span', { class: 'mini-note', text: 'Дивіденди ' + nf1.format(dy) + '% на рік' }));
+    };
+    fill(statCache[conid] && statCache[conid].v);
+    var B = window.PortfelBuy;
+    if (ART && B && B.read && conid && !(statCache[conid] && Date.now() - statCache[conid].at < 6e5)) {
+      statCache[conid] = { at: Date.now(), v: statCache[conid] && statCache[conid].v };
+      B.ready.then(function (mcp) {
+        if (!mcp) return null;
+        return B.read('get_price_snapshot', { contract_id: Number(conid), market_data_names: ['misc_statistics', 'cumulative_perf_1d', 'cumulative_perf_1w', 'cumulative_perf_1m', 'cumulative_perf_1y', 'cumulative_perf_3y', 'cumulative_perf_5y', 'dividend_yield'] });
+      }).then(function (r) { if (r) { statCache[conid] = { at: Date.now(), v: r }; fill(r); } }).catch(function () { /* лишаються цифри з графіка */ });
+    }
+    return box;
+  }
+  function gauge(share, cap) {
+    var W = 92, H = 52, cx = W / 2, cy = 46, r = 38;
+    var frac = Math.max(0, Math.min(1, share / (2 * cap)));
+    var arc = function (a0, a1) {
+      var p = function (a) { return (cx - r * Math.cos(a)).toFixed(2) + ' ' + (cy - r * Math.sin(a)).toFixed(2); };
+      return 'M' + p(a0) + 'A' + r + ' ' + r + ' 0 0 1 ' + p(a1);
+    };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'gauge-svg', 'aria-hidden': 'true' });
+    svg.appendChild(sv('path', { d: arc(0, Math.PI), class: 'g-bg' }));
+    if (frac > 0.001) svg.appendChild(sv('path', { d: arc(0, Math.PI * frac), class: 'g-val ' + (share > cap ? 'over' : 'ok') }));
+    svg.appendChild(sv('line', { x1: cx, y1: cy - r - 6, x2: cx, y2: cy - r + 6, class: 'g-tick' }));
+    var a = Math.PI * frac;
+    svg.appendChild(sv('line', { x1: cx, y1: cy, x2: (cx - (r - 10) * Math.cos(a)).toFixed(2), y2: (cy - (r - 10) * Math.sin(a)).toFixed(2), class: 'g-needle' }));
+    svg.appendChild(sv('circle', { cx: cx, cy: cy, r: 3, class: 'g-hub' }));
+    return h('div', { class: 'gauge', title: 'Частка в рахунку разом із тим, що лежить у фондах; риска посередині це твоя межа' }, svg,
+      h('span', null, h('b', { class: share > cap ? 'down-t' : 'up-t', text: pct(share) }), ' рахунку', h('small', { text: share > cap ? 'вище межі ' + pct(cap, 0) : 'у межах ' + pct(cap, 0) })));
   }
 
   /* ---------- Згортання великих блоків; стан пам'ятається на пристрої ---------- */
