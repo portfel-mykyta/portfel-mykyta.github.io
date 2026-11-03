@@ -1535,6 +1535,8 @@
     m.snaps.forEach(function (s) { if (s.date >= from) Object.keys(s.parts).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); }); });
     var grid = $('miniGrid');
     grid.replaceChildren();
+    grid.classList.toggle('no-trades', !cardShow('trades'));
+    grid.classList.toggle('no-axes', !cardShow('axes'));
     var cards = [], dates = {};
     keys.forEach(function (k) {
       var pts = priceSeries(m, k, from);
@@ -1604,6 +1606,56 @@
 
   /* ---------- Картка активу: діапазон за рік, зміни за періоди, частка від межі ---------- */
   var statCache = {};
+  // Що показувати в картках активів (кожне можна сховати)
+  var CARD_PARTS = [['range', 'Діапазон за 52 тижні'], ['perf', 'Зміни за періоди'], ['div', 'Дивіденди'], ['cap', 'Спідометр частки від межі'],
+    ['trend', 'Спідометр тренду'], ['ma', 'Ковзні середні'], ['trades', 'Точки угод на графіку'], ['axes', 'Осі графіка']];
+  function cardShow(id) { try { var o = JSON.parse(store.get('portfel.cardParts') || '{}'); return o[id] !== false; } catch (e) { return true; } }
+  function cardSet(id, on) { var o = {}; try { o = JSON.parse(store.get('portfel.cardParts') || '{}') || {}; } catch (e) { /* нове */ } o[id] = on; store.set('portfel.cardParts', JSON.stringify(o)); }
+  (function () {
+    var form = $('watchForm');
+    var det = h('details', { class: 'card-parts' }, h('summary', { text: 'Що показувати в картках' }));
+    var list = h('div', { class: 'card-parts-list' });
+    CARD_PARTS.forEach(function (c) {
+      var cb = h('input', { type: 'checkbox' });
+      cb.checked = cardShow(c[0]);
+      cb.addEventListener('change', function () { cardSet(c[0], cb.checked); if (state.m) renderAssets(state.m); });
+      list.append(h('label', { class: 'check' }, cb, h('span', { text: c[1] })));
+    });
+    det.append(list);
+    form.parentNode.insertBefore(det, form);
+  })();
+  // Простий середній курс за n останніх точок
+  function sma(full, n) { if (full.length < n) return null; var s = 0; for (var i = full.length - n; i < full.length; i++) s += full[i].p; return s / n; }
+  // Тренд: де ціна відносно середніх за 20, 50 і 200 днів і відносно діапазону за 13 тижнів. Від −1 до +1.
+  function trendScore(full) {
+    if (full.length < 25) return null;
+    var last = full[full.length - 1].p, votes = 0, n = 0;
+    [20, 50, 200].forEach(function (k) { var a = sma(full, k); if (ok(a)) { votes += last > a ? 1 : -1; n++; } });
+    var q = full.filter(function (x) { return d(x.date).getTime() >= Date.now() - 91 * 864e5; });
+    if (q.length > 5) {
+      var lo = Math.min.apply(null, q.map(function (x) { return x.p; })), hi = Math.max.apply(null, q.map(function (x) { return x.p; }));
+      if (hi > lo) { votes += ((last - lo) / (hi - lo)) * 2 - 1; n++; }
+    }
+    return n ? votes / n : null;
+  }
+  function trendGauge(score) {
+    var W = 92, H = 52, cx = W / 2, cy = 46, r = 38;
+    var frac = (score + 1) / 2;
+    var arc = function (a0, a1, cls) {
+      var p = function (a) { return (cx - r * Math.cos(a)).toFixed(2) + ' ' + (cy - r * Math.sin(a)).toFixed(2); };
+      return sv('path', { d: 'M' + p(a0) + 'A' + r + ' ' + r + ' 0 0 1 ' + p(a1), class: cls });
+    };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'gauge-svg', 'aria-hidden': 'true' });
+    svg.appendChild(arc(0, Math.PI * 0.4, 'g-bg t-down'));
+    svg.appendChild(arc(Math.PI * 0.4, Math.PI * 0.6, 'g-bg'));
+    svg.appendChild(arc(Math.PI * 0.6, Math.PI, 'g-bg t-up'));
+    var a = Math.PI * frac;
+    svg.appendChild(sv('line', { x1: cx, y1: cy, x2: (cx - (r - 10) * Math.cos(a)).toFixed(2), y2: (cy - (r - 10) * Math.sin(a)).toFixed(2), class: 'g-needle' }));
+    svg.appendChild(sv('circle', { cx: cx, cy: cy, r: 3, class: 'g-hub' }));
+    var label = score <= -0.6 ? 'сильно вниз' : score <= -0.2 ? 'вниз' : score < 0.2 ? 'нейтрально' : score < 0.6 ? 'вгору' : 'сильно вгору';
+    return h('div', { class: 'gauge', title: 'Куди рухалась ціна останні тижні й місяці: ціна відносно середніх за 20, 50 і 200 днів і діапазону за 13 тижнів. Це не прогноз.' }, svg,
+      h('span', null, 'Тренд: ', h('b', { class: score >= 0.2 ? 'up-t' : score <= -0.2 ? 'down-t' : '', text: label }), h('small', { text: 'рух ціни, не прогноз' })));
+  }
   function seriesChange(pts, days) {
     if (pts.length < 2) return null;
     var last = pts[pts.length - 1], t = d(last.date).getTime() - days * 864e5, base = null;
@@ -1622,7 +1674,7 @@
       var hi = yr.length ? Math.max.apply(null, yr.map(function (x) { return x.p; })) : null;
       var ms = snap && snap['misc-statistics'];
       if (ms && ok(Number(ms.low_52w)) && ok(Number(ms.high_52w))) { lo = Number(ms.low_52w); hi = Number(ms.high_52w); }
-      if (ok(lo) && ok(hi) && hi > lo && ok(last)) {
+      if (cardShow('range') && ok(lo) && ok(hi) && hi > lo && ok(last)) {
         var pos = Math.max(0, Math.min(1, (last - lo) / (hi - lo)));
         var mk = h('i', { class: 'rng-mk' }); mk.style.left = (pos * 100).toFixed(1) + '%';
         box.append(h('div', { class: 'rng', title: 'Ціна відносно мінімуму й максимуму за 52 тижні' },
@@ -1638,15 +1690,26 @@
         if (!ok(v)) return;
         row2.append(h('span', { class: 'perf-c' }, h('small', { text: p[0] }), h('b', { class: v >= 0.0005 ? 'up-t' : v <= -0.0005 ? 'down-t' : '', text: pctS(v) })));
       });
-      if (row2.children.length) box.append(row2);
+      if (row2.children.length && cardShow('perf')) box.append(row2);
+      var gs = h('div', { class: 'gauges' });
       var dy = snap && snap['dividend-yield'] && Number(snap['dividend-yield'].yield_pct);
       // Спідометр: частка окремої акції в рахунку відносно твоєї межі
       if (row && !row.fund && m) {
         var st = planSettings(), P = planModel(m, st);
         var s = P.stocks.filter(function (x) { return x.sym === k; })[0];
-        if (s) box.append(gauge(s.now, st.cap));
+        if (s && cardShow('cap')) gs.append(gauge(s.now, st.cap));
       }
-      if (ok(dy) && dy > 0) box.append(h('span', { class: 'mini-note', text: 'Дивіденди ' + nf1.format(dy) + '% на рік' }));
+      var ts = trendScore(full);
+      if (ok(ts) && cardShow('trend')) gs.append(trendGauge(ts));
+      if (gs.children.length) box.append(gs);
+      if (cardShow('ma') && ok(last)) {
+        var mas = [20, 50, 200].map(function (n) { var a = sma(full, n); return ok(a) ? [n, a] : null; }).filter(Boolean);
+        if (mas.length) box.append(h('div', { class: 'ma-row', title: 'Середня ціна за останні N торгових днів' }, mas.map(function (x) {
+          var above = last >= x[1];
+          return h('span', { class: 'ma-c' }, h('small', { text: 'Середня ' + x[0] + ' дн.' }), h('b', { text: usd(x[1]) }), h('em', { class: above ? 'up-t' : 'down-t', text: above ? 'ціна вище' : 'ціна нижче' }));
+        })));
+      }
+      if (cardShow('div') && ok(dy) && dy > 0) box.append(h('span', { class: 'mini-note', text: 'Дивіденди ' + nf1.format(dy) + '% на рік' }));
     };
     fill(statCache[conid] && statCache[conid].v);
     var B = window.PortfelBuy;
