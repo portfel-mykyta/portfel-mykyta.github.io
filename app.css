@@ -808,3 +808,8 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .analysis-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .analysis-head h3 { font-size: 17px; }
 .analysis-body { white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+
+.bond-picks { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bond-chip { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--card); cursor: pointer; font-size: 13px; font-weight: 600; }
+.bond-chip:hover { background: var(--accent-soft); }
+.tag-bond { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-style: normal; font-weight: 600; }

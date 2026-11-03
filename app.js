@@ -1563,7 +1563,7 @@
         var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': w.sym + ': ціна однієї акції по днях' });
         var dot = h('i', { class: 'pdot' }); dot.style.background = 'var(--mkt)';
         grid.append(h('article', { class: 'mini watch' },
-          h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: w.sym }), h('small', { text: 'спостереження' })), valEl),
+          h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: w.sym }), h('small', { text: PP.BONDS[w.sym] ? 'облігації' : 'спостереження' })), valEl),
           subEl, chart,
           h('span', { class: 'mini-acts' },
             h('button', { class: 'linkish', type: 'button', text: 'Аналіз', onclick: function () { analyze(w.sym, w.name, pts); } }),
@@ -1602,6 +1602,30 @@
     }).catch(function () { toast('Не вдалося взяти ціни ' + w.sym + ' з IBKR'); })
       .then(function () { watchLoading[w.conid] = false; });
   }
+  // Облігації: окремих облігацій конектор не має, тож це фонди облігацій
+  var BOND_PICKS = [['SGOV', 'уряд США, до 3 міс.'], ['BIL', 'уряд США, 1–3 міс.'], ['SHY', 'уряд США, 1–3 роки'], ['IEF', 'уряд США, 7–10 років'],
+    ['TLT', 'уряд США, 20+ років'], ['TIP', 'захист від інфляції'], ['BND', 'усі облігації США'], ['LQD', 'корпоративні надійні'], ['HYG', 'корпоративні ризиковані']];
+  (function () {
+    var row = h('div', { class: 'bond-picks' }, h('span', { class: 'note', text: 'Облігації: ' }));
+    BOND_PICKS.forEach(function (b) {
+      row.append(h('button', { class: 'bond-chip', type: 'button', title: b[1], text: b[0], onclick: function () { addWatchSym(b[0]); } }));
+    });
+    $('watchForm').insertBefore(row, $('watchRes'));
+  })();
+  function addWatch(x) {
+    var wl = watchList().filter(function (w) { return w.conid !== x.underlying_contract_id; });
+    wl.push({ sym: x.symbol, conid: x.underlying_contract_id, name: x.description || x.symbol });
+    watchSave(wl); $('watchRes').replaceChildren(); $('watchQ').value = '';
+    renderAssets(state.m);
+  }
+  function addWatchSym(sym) {
+    var B = window.PortfelBuy;
+    if (!B || !B.read) { toast('Спостереження працює лише в Claude'); return; }
+    B.read('search_contracts', { query: sym }).then(function (r) {
+      var x = ((r && r.results) || []).filter(function (y) { return y && y.symbol === sym && y.country_code === 'US' && y.underlying_contract_id; })[0];
+      if (x) addWatch(x); else toast('IBKR не знайшов ' + sym);
+    }).catch(function () { toast('IBKR зараз не відповідає'); });
+  }
   $('watchForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var q = $('watchQ').value.trim(), ul = $('watchRes'), B = window.PortfelBuy;
@@ -1614,12 +1638,10 @@
       ul.replaceChildren();
       if (!list.length) { ul.append(h('li', { class: 'note', text: 'На американських біржах нічого не знайшлося.' })); return; }
       list.forEach(function (x) {
-        ul.append(h('li', null, h('button', { type: 'button', class: 'watch-pick', onclick: function () {
-          var wl = watchList().filter(function (w) { return w.conid !== x.underlying_contract_id; });
-          wl.push({ sym: x.symbol, conid: x.underlying_contract_id, name: x.description || x.symbol });
-          watchSave(wl); ul.replaceChildren(); $('watchQ').value = '';
-          renderAssets(state.m);
-        } }, h('b', { text: x.symbol }), ' ', h('span', { text: x.description || '' }))));
+        var tp = PP.typeOf(x.symbol, false);
+        ul.append(h('li', null, h('button', { type: 'button', class: 'watch-pick', onclick: function () { addWatch(x); } },
+          h('b', { text: x.symbol }), ' ', h('span', { text: x.description || '' }),
+          tp === 'bond' ? h('em', { class: 'tag-bond', text: 'облігації' }) : null)));
       });
     }).catch(function () { ul.replaceChildren(h('li', { class: 'note', text: 'IBKR зараз не відповідає.' })); });
   });
@@ -1627,7 +1649,22 @@
   // Аналіз у форматі Матриці: Claude отримує ціни з IBKR і пише картку
   var anCtrl = null;
   $('analysisClose').addEventListener('click', function () { if (anCtrl) anCtrl.abort(); $('analysis').hidden = true; });
+  var anYield = null;
   function analyze(sym, name, pts) {
+    var B = window.PortfelBuy, w = watchList().filter(function (x) { return x.sym === sym; })[0];
+    var conid = w ? w.conid : (PP.FUNDS[sym] || {}).conid;
+    anYield = null;
+    if (B && B.read && conid && PP.BONDS[sym]) {
+      $('analysis').hidden = false; $('analysisBody').textContent = 'Беру дохідність з IBKR…';
+      B.read('get_price_snapshot', { contract_id: Number(conid), market_data_names: ['dividend_yield'] })
+        .then(function (r) { var y = r && r['dividend-yield'] && r['dividend-yield'].yield_pct; anYield = ok(Number(y)) ? Number(y) : null; })
+        .catch(function () { /* без дохідності */ })
+        .then(function () { analyze2(sym, name, pts); });
+      return;
+    }
+    analyze2(sym, name, pts);
+  }
+  function analyze2(sym, name, pts) {
     var box = $('analysis'), body = $('analysisBody');
     $('analysisTitle').textContent = 'Аналіз ' + sym + (name && name !== sym ? ', ' + name : '');
     body.textContent = 'Claude думає…';
@@ -1646,6 +1683,18 @@
       '5. Слово ціни (дешево / справедлива / дорого, але росте / дорого без росту / пастка дешевизни) і чому.\n6. Вердикт: STRONG BUY, BUY, BUY WAIT, AVOID або СПЕКУЛЯЦІЯ.\n' +
       '7. Арифметика х2: що має статися з прибутком і мультиплікатором для подвоєння.\n8. Три ризики.\n\n' +
       'Важливо: свіжих звітів і новин у тебе немає, ти знаєш дані лише до своєї дати навчання. Позначай кожну фінансову цифру «(до ' + 'дати навчання, перевір)», не вигадуй точних чисел, яких не знаєш, і в кінці одним рядком напиши, що це не інвестиційна порада.';
+    if (PP.BONDS[sym]) {
+      prompt = 'Ти аналітик облігацій. Пиши українською, коротко, без довгого тире, звичайним текстом без таблиць Markdown.\n\n' +
+        'Фонд облігацій: ' + sym + ' (' + name + ').\nЦіни з IBKR: зараз ' + last.p.toFixed(2) + ' (' + last.date + '), на ' + first.date + ' було ' + first.p.toFixed(2) +
+        ', максимум за період ' + hi.toFixed(2) + ', мінімум ' + lo.toFixed(2) + (anYield ? ', дивідендна дохідність за IBKR ' + anYield + '%' : '') + '.\n\n' +
+        'Структура відповіді:\n1. Рядок підсумку: «' + sym + ': для чого підходить · ризик низький/середній/високий».\n' +
+        '2. Що всередині: емітенти (уряд, корпорації), кредитна якість, середній строк до погашення й дюрація.\n' +
+        '3. Дохідність: приблизна дохідність до погашення і чим вона відрізняється від дивідендної.\n' +
+        '4. Як реагує на ставки: що буде з ціною, якщо ставки ФРС зростуть або впадуть на 1 відсотковий пункт (через дюрацію).\n' +
+        '5. Витрати фонду, виплати (як часто), податки для резидента України: виплати це іноземні дивіденди (9% ПДФО і 5% військового збору), прибуток від продажу 18% і 5%.\n' +
+        '6. Роль у портфелі з фондом S&P 500: що дає, чого не дає, чим відрізняється від SGOV.\n7. Три ризики.\n\n' +
+        'Важливо: свіжих даних у тебе немає, лише до дати навчання. Позначай кожну цифру «(до дати навчання, перевір)», не вигадуй точних чисел, яких не знаєш, і в кінці одним рядком напиши, що це не інвестиційна порада.';
+    }
     anCtrl = new AbortController();
     window.claude.use('sample').then(function (sample) {
       if (!sample) { body.textContent = 'Тут Claude недоступний для аналізу. Попроси його в чаті: «дай аналіз ' + sym + ' в стилі Матриці».'; return; }
