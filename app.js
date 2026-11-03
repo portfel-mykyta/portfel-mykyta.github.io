@@ -1320,6 +1320,7 @@
             window.PortfelBuy.actionRow(o, 'Створити заявку на ' + o.sym));
         })),
         h('div', { class: 'plan-act' },
+          h('a', { class: 'btn ghost', href: '#buy', onclick: function (e) { e.preventDefault(); $('buy').scrollIntoView({ behavior: 'smooth' }); setTimeout(function () { var q = document.getElementById('kq'); if (q) q.focus({ preventScroll: true }); }, 400); } }, 'Інша акція чи ETF'),
           h('a', { class: 'btn ghost', href: DEPOSIT_URL, target: '_blank', rel: 'noopener' }, 'Поповнити рахунок', icon('i-out')),
           h('span', { class: 'plan-act-note', text: 'Заявка нічого не купує, поки ти не відкриєш її в IBKR і не натиснеш Submit. Поповнення в IBKR: Transfer & Pay → Transfer Funds → Deposit.' }))));
     } else out.append(h('div', { class: 'plan-buy' },
