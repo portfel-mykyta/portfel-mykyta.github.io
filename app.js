@@ -1588,7 +1588,44 @@
   /* ---------- Згортання великих блоків; стан пам'ятається на пристрої ---------- */
   var FOLDABLE = ['market', 'holdings', 'facts', 'inside', 'deposit', 'plan', 'buy', 'assets', 'growth'];
   function foldState() { try { return JSON.parse(store.get('portfel.folds') || '{}') || {}; } catch (e) { return {}; } }
+  function orderSave() {
+    var ids = Array.prototype.map.call(document.querySelectorAll('#main > section'), function (el) { return el.id; })
+      .filter(function (id) { return FOLDABLE.indexOf(id) >= 0; });
+    store.set('portfel.order', JSON.stringify(ids));
+  }
+  var orderApplied = false;
+  function applyOrder() {
+    if (orderApplied) return;
+    orderApplied = true;
+    var ids;
+    try { ids = JSON.parse(store.get('portfel.order') || 'null'); } catch (e) { ids = null; }
+    if (!Array.isArray(ids)) return;
+    var anchor = $('ops');
+    ids.concat(FOLDABLE.filter(function (id) { return ids.indexOf(id) < 0; })).forEach(function (id) {
+      var el = $(id);
+      if (el && anchor) anchor.parentNode.insertBefore(el, anchor);
+    });
+  }
+  // Сусідній видимий блок, з яким можна помінятися місцями
+  function neighbour(sec, dir) {
+    var el = sec;
+    do { el = dir < 0 ? el.previousElementSibling : el.nextElementSibling; } while (el && (el.hidden || FOLDABLE.indexOf(el.id) < 0));
+    return el;
+  }
+  function move(sec, dir) {
+    var other = neighbour(sec, dir);
+    if (!other) return;
+    if (dir < 0) other.parentNode.insertBefore(sec, other); else other.parentNode.insertBefore(other, sec);
+    orderSave();
+    setupFolds();
+    sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    var b = sec.querySelector('.move-' + (dir < 0 ? 'up' : 'down'));
+    if (b) b.focus({ preventScroll: true });
+    if (state.m) { renderAssets(state.m); }
+  }
+  var dragSec = null;
   function setupFolds() {
+    applyOrder();
     var st = foldState();
     FOLDABLE.forEach(function (id) {
       var sec = $(id);
@@ -1596,7 +1633,7 @@
       var head = sec.querySelector(':scope > .panel-head') || sec.querySelector(':scope > h2');
       if (!head) return;
       var title = (sec.querySelector('h2') || {}).textContent || '';
-      var btn = head.querySelector(':scope > .fold-btn');
+      var btn = head.querySelector('.fold-btn');
       if (!btn) {
         btn = h('button', { class: 'icon-btn fold-btn', type: 'button' }, icon('i-chev'));
         btn.addEventListener('click', function () {
@@ -1606,14 +1643,39 @@
           applyFold(sec, btn, s2[id], title);
           if (!s2[id]) { if (state.m) { if (id === 'assets') renderAssets(state.m); if (id === 'growth') renderGrowth(state.m); } }
         });
-        if (head.tagName === 'H2') { var wrap = h('div', { class: 'panel-head fold-head' }); head.replaceWith(wrap); wrap.append(head, btn); head = wrap; }
-        else head.append(btn);
+        var up = h('button', { class: 'icon-btn move-btn move-up', type: 'button', title: 'Вище', 'aria-label': 'Перемістити вище: ' + title, text: '↑', onclick: function () { move(sec, -1); } });
+        var down = h('button', { class: 'icon-btn move-btn move-down', type: 'button', title: 'Нижче', 'aria-label': 'Перемістити нижче: ' + title, text: '↓', onclick: function () { move(sec, 1); } });
+        var grip = h('span', { class: 'grip', title: 'Перетягни, щоб змінити порядок', draggable: 'true', 'aria-hidden': 'true', text: '⠿' });
+        grip.addEventListener('dragstart', function (e) { dragSec = sec; sec.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); e.dataTransfer.setDragImage(sec, 30, 20); } catch (x) { /* без картинки */ } });
+        grip.addEventListener('dragend', function () { sec.classList.remove('dragging'); dragSec = null; Array.prototype.forEach.call(document.querySelectorAll('.drop-before, .drop-after'), function (el) { el.classList.remove('drop-before', 'drop-after'); }); });
+        sec.addEventListener('dragover', function (e) {
+          if (!dragSec || dragSec === sec) return;
+          e.preventDefault();
+          var r = sec.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2;
+          sec.classList.toggle('drop-after', after); sec.classList.toggle('drop-before', !after);
+        });
+        sec.addEventListener('dragleave', function () { sec.classList.remove('drop-before', 'drop-after'); });
+        sec.addEventListener('drop', function (e) {
+          if (!dragSec || dragSec === sec) return;
+          e.preventDefault();
+          var after = sec.classList.contains('drop-after');
+          sec.classList.remove('drop-before', 'drop-after');
+          sec.parentNode.insertBefore(dragSec, after ? sec.nextSibling : sec);
+          orderSave();
+          setupFolds();
+          if (state.m) renderAssets(state.m);
+        });
+        var tools = h('span', { class: 'block-tools' }, grip, up, down, btn);
+        if (head.tagName === 'H2') { var wrap = h('div', { class: 'panel-head fold-head' }); head.replaceWith(wrap); wrap.append(head, tools); head = wrap; }
+        else head.append(tools);
       }
       applyFold(sec, btn, !!st[id], title);
     });
   }
   function applyFold(sec, btn, collapsed, title) {
     sec.classList.toggle('collapsed', collapsed);
+    var tools = btn.parentNode;
+    if (tools) { var first = neighbour(sec, -1) == null, last = neighbour(sec, 1) == null; tools.querySelector('.move-up').disabled = first; tools.querySelector('.move-down').disabled = last; }
     btn.setAttribute('aria-expanded', String(!collapsed));
     btn.setAttribute('aria-label', (collapsed ? 'Розгорнути: ' : 'Згорнути: ') + title);
     btn.title = collapsed ? 'Розгорнути' : 'Згорнути';

@@ -839,3 +839,16 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .hero .trend { grid-area: trend; min-height: 240px; align-self: stretch; }
   .hero .day { grid-area: day; align-self: end; }
 }
+
+/* Порядок блоків */
+.grid { grid-auto-flow: row dense; }
+.block-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.block-tools .fold-btn { margin-left: 0; }
+.move-btn { width: 32px; height: 32px; font-size: 16px; font-weight: 600; }
+.move-btn:disabled { opacity: .3; cursor: default; }
+.grip { cursor: grab; padding: 0 6px; color: var(--muted); font-size: 18px; user-select: none; }
+.grip:active { cursor: grabbing; }
+@media (hover: none) { .grip { display: none; } }
+section.dragging { opacity: .45; }
+section.drop-before { box-shadow: 0 -3px 0 var(--accent); }
+section.drop-after { box-shadow: 0 3px 0 var(--accent); }
