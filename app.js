@@ -537,6 +537,7 @@
     renderDeposit(m);
     renderPlan(m);
     renderGrowth(m);
+    renderAssets(m);
     renderOps(m);
     renderAbout(m);
     drawGuilloche(document.querySelector('[data-guilloche="hero"]'), 'hero');
@@ -1489,6 +1490,131 @@
     drawStack(chart, m, m.snaps.slice(c.ia));
     renderCloses(m);
   }
+
+  /* ---------- Кожен актив по днях: картки з графіками, спільний курсор ---------- */
+  function assetSeries(m, from) {
+    var S = m.snaps.filter(function (s) { return s.date >= from; });
+    if (m.data.live) {
+      var parts = {}, qty = {};
+      m.rows.forEach(function (r) { parts[r.sym] = r.value; qty[r.sym] = r.qty; });
+      S = S.concat([{ date: todayIso(), cash: m.other, parts: parts, qty: qty, live: true }]);
+    }
+    return S;
+  }
+  function renderAssets(m) {
+    var sec = $('assets');
+    var avail = growthPeriods(m);
+    sec.hidden = m.snaps.length < 2 || !avail.length;
+    if (sec.hidden) return;
+    var pid = store.get('portfel.aperiod');
+    if (!avail.some(function (p) { return p.id === pid; })) pid = avail.some(function (p) { return p.id === '1m'; }) ? '1m' : avail[0].id;
+    var box = $('aPeriods');
+    box.replaceChildren();
+    avail.forEach(function (p) {
+      box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(p.id === pid), text: p.label,
+        onclick: function () { store.set('portfel.aperiod', p.id); renderAssets(state.m); } }));
+    });
+    var S = assetSeries(m, growthStart(pid, m));
+    var keys = [];
+    m.rows.forEach(function (r) { keys.push(r.sym); });
+    S.forEach(function (s) { Object.keys(s.parts).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); }); });
+    var grid = $('miniGrid');
+    grid.replaceChildren();
+    var cards = [];
+    keys.forEach(function (k) {
+      var row = m.rows.filter(function (r) { return r.sym === k; })[0];
+      var pts = [], gain = 0, startV = null, prev = null;
+      S.forEach(function (s) {
+        var v = s.parts[k];
+        if (!ok(v)) { prev = null; return; }
+        var dg = null;
+        if (prev) {
+          var q = s.qty && s.qty[k], qp = prev.qty && prev.qty[k];
+          var px = ok(q) && q ? v / q : null;
+          dg = v - prev.parts[k] - (ok(q) && ok(qp) && ok(px) ? (q - qp) * px : 0);
+          gain += dg;
+        } else if (startV == null) startV = v;
+        pts.push({ date: s.date, v: v, dg: dg, live: !!s.live });
+        prev = s;
+      });
+      if (!pts.length) return;
+      var color = colorOf(m.slot[k] || slotFor(m, k));
+      var last = pts[pts.length - 1];
+      var name = row ? row.title : (NAMES[k] || k);
+      var valEl = h('b', { class: 'mini-val' }, money(usd(last.v)));
+      var subEl = h('span', { class: 'mini-sub' });
+      var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': name + ': вартість по днях' });
+      var dot = h('i', { class: 'pdot' }); dot.style.background = color;
+      var card = h('article', { class: 'mini' + (row ? '' : ' sold') },
+        h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: name }), row ? null : h('small', { text: 'продано' })), valEl),
+        subEl, chart);
+      grid.append(card);
+      var basis = startV || (row && row.cost) || last.v;
+      var info = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, gain: gain, basis: basis, row: row };
+      cards.push(info);
+      setSub(info, null);
+    });
+    // Малюємо, коли картки вже мають розмір
+    requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, S); }); });
+  }
+  function setSub(c, p) {
+    c.subEl.replaceChildren();
+    if (!p) {
+      var cls = c.gain >= 0.005 ? 'up-t' : c.gain <= -0.005 ? 'down-t' : '';
+      append(c.subEl, [h('span', { class: cls }, money(usdS(c.gain)), ' (' + pctS(c.basis ? c.gain / c.basis : null) + ')'), ' за період, без докупок']);
+      c.valEl.replaceChildren(money(usd(c.pts[c.pts.length - 1].v)));
+      return;
+    }
+    c.valEl.replaceChildren(money(usd(p.v)));
+    var dcls = p.dg == null ? '' : p.dg >= 0.005 ? 'up-t' : p.dg <= -0.005 ? 'down-t' : '';
+    append(c.subEl, [(p.live ? 'зараз' : dayLong(p.date)) + ': ', p.dg == null ? 'перший день' : h('span', { class: dcls }, money(usdS(p.dg)), ' за день')]);
+  }
+  function drawMini(c, all, S) {
+    var box = c.chart;
+    box.replaceChildren();
+    var W = Math.max(180, box.clientWidth), H = Math.max(70, box.clientHeight);
+    var dates = S.map(function (s) { return s.date; });
+    var t0 = d(dates[0]).getTime(), t1 = d(dates[dates.length - 1]).getTime();
+    var lo = Infinity, hi = -Infinity;
+    c.pts.forEach(function (p) { lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); });
+    if (hi - lo < hi * 0.02) { lo -= hi * 0.01 + 0.01; hi += hi * 0.01 + 0.01; }
+    var pad = 4;
+    var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - 2 * pad); };
+    var Y = function (v) { return pad + (1 - (v - lo) / (hi - lo)) * (H - 2 * pad); };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    var line = c.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p.date).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join('');
+    var area = line + 'L' + X(c.pts[c.pts.length - 1].date).toFixed(1) + ' ' + (H - pad) + 'L' + X(c.pts[0].date).toFixed(1) + ' ' + (H - pad) + 'Z';
+    var a = sv('path', { d: area, class: 'mini-area' }); a.style.fill = c.color;
+    var l = sv('path', { d: line, class: 'mini-line' }); l.style.stroke = c.color;
+    var cross = sv('line', { class: 'mini-cross', x1: 0, x2: 0, y1: 0, y2: H, visibility: 'hidden' });
+    var dotEl = sv('circle', { r: 3.5, class: 'mini-dot', visibility: 'hidden' }); dotEl.style.fill = c.color;
+    svg.append(a, l, cross, dotEl);
+    box.append(svg);
+    c.show = function (date) {
+      if (!date) { cross.setAttribute('visibility', 'hidden'); dotEl.setAttribute('visibility', 'hidden'); setSub(c, null); return; }
+      var x = X(date);
+      cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
+      var p = c.pts.filter(function (q) { return q.date === date; })[0];
+      if (p) { dotEl.setAttribute('cx', x); dotEl.setAttribute('cy', Y(p.v)); dotEl.setAttribute('visibility', 'visible'); setSub(c, p); }
+      else { dotEl.setAttribute('visibility', 'hidden'); c.valEl.replaceChildren('н/д'); c.subEl.replaceChildren(dayLong(date) + ': не було в портфелі'); }
+    };
+    function pick(clientX) {
+      var r = box.getBoundingClientRect();
+      var x = (clientX - r.left) / r.width * W, best = dates[0], bd = Infinity;
+      dates.forEach(function (s) { var dx = Math.abs(X(s) - x); if (dx < bd) { bd = dx; best = s; } });
+      return best;
+    }
+    function all_(date) { all.forEach(function (o) { if (o.show) o.show(date); }); }
+    box.onpointermove = function (e) { all_(pick(e.clientX)); };
+    box.onpointerleave = function () { all_(null); };
+    var ki = dates.length - 1;
+    box.onkeydown = function (e) {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault(); ki = Math.max(0, Math.min(dates.length - 1, ki + (e.key === 'ArrowLeft' ? -1 : 1))); all_(dates[ki]);
+    };
+    box.onblur = function () { all_(null); };
+  }
+
   // Колір для паперу, якого вже немає в портфелі (продано): наступний вільний слот
   function slotFor(m, key) {
     var order = (m.data.colorOrder || []).slice();
@@ -2070,6 +2196,11 @@
   if (window.ResizeObserver) {
     var ro = new ResizeObserver(scheduleRedraw);
     ro.observe($('chart')); ro.observe($('spark')); ro.observe($('gChart'));
+    var miniW = 0;
+    new ResizeObserver(function () {
+      var w = $('miniGrid').clientWidth;
+      if (w && Math.abs(w - miniW) > 4 && state.m && !$('assets').hidden) { miniW = w; renderAssets(state.m); }
+    }).observe($('miniGrid'));
   } else window.addEventListener('resize', scheduleRedraw);
 
   /* ---------- Встановлення як застосунок ---------- */
