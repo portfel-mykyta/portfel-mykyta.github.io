@@ -21,6 +21,10 @@
   // Сторінка «Купівля» в Claude: створює заявки в IBKR через конектор, відправляє їх власник
   var KUPIVLIA_URL = 'https://claude.ai/artifact/97fMDc1ZngDwhjdcGPJAss';
   var PP = window.PortfelPlan;
+  // Матриця Тараса Гука: картка компанії за тікером (потрібен свій вхід на сайт)
+  var MATRIX_URL = 'https://matrix.tarasguk.com/';
+  // Поповнення робиться в IBKR: Transfer & Pay → Transfer Funds → Deposit
+  var DEPOSIT_URL = 'https://www.interactivebrokers.com/portal/';
 
   // Частки компаній в S&P 500 і списки фондів: спільні з «Купівлею», у plan-core.js
   var SP500 = PP.SP500;
@@ -948,7 +952,11 @@
       var funds = sum(m.rows.filter(function (x) { return TRACKERS[x.sym]; }), function (x) { return x.value; });
       if (funds > 0) extra.push('Ще ' + usd(funds * w) + ' у ' + r.name + ' лежить усередині твоїх фондів.');
     }
-    return [dl, extra.length ? h('p', { text: extra.join(' ') }) : null];
+    var links = r.fund ? null : h('p', { class: 'pos-links' },
+      h('a', { href: MATRIX_URL + 't/' + encodeURIComponent(r.sym) + '/', target: '_blank', rel: 'noopener' }, 'Картка ' + r.sym + ' у Матриці'),
+      ' · ',
+      h('a', { href: KUPIVLIA_URL, target: '_blank', rel: 'noopener' }, 'Докупити'));
+    return [dl, extra.length ? h('p', { text: extra.join(' ') }) : null, links];
   }
   function cashItem(m) {
     var dot = h('i', { class: 'pdot' });
@@ -1140,7 +1148,8 @@
       h('p', { class: 'plan-why', text: why.join(' ') }),
       h('div', { class: 'plan-act' },
         h('a', { class: 'btn primary', href: KUPIVLIA_URL + '#' + PP.toHash(st), target: '_blank', rel: 'noopener' }, 'Купити', icon('i-out')),
-        h('span', { class: 'plan-act-note', text: 'Відкриється «Купівля» в Claude: вона створить заявку в IBKR за поточними цінами, а відправиш її ти.' }))));
+        h('a', { class: 'btn ghost', href: DEPOSIT_URL, target: '_blank', rel: 'noopener' }, 'Поповнити рахунок', icon('i-out')),
+        h('span', { class: 'plan-act-note', text: '«Купити» відкриває «Купівлю» в Claude: вона створить заявку в IBKR, а відправиш її ти. Поповнення в IBKR: Transfer & Pay → Transfer Funds → Deposit.' }))));
 
     // Що буде з частками
     if (P.stocks.length) {

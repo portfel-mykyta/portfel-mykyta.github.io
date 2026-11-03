@@ -281,7 +281,7 @@ a { color: var(--accent); }
   <section class="card" id="other" aria-labelledby="otherH">
     <div class="card-head">
       <h2 id="otherH">Інша покупка</h2>
-      <p class="meta">Акції й фонди американських бірж</p>
+      <p class="meta">Будь-яка акція чи фонд американських бірж</p>
     </div>
     <form class="find" id="findForm" role="search">
       <input id="q" type="search" placeholder="Тікер або назва: KO, SGOV, Coca-Cola" autocomplete="off" aria-label="Тікер або назва">
@@ -668,7 +668,8 @@ a { color: var(--accent); }
     S.m = P.model({ nav: a.nav, cash: a.cash, amount: set.amount, cap: set.cap, bonds: set.bonds, holdings: a.holdings });
     var warn = $('cashWarn');
     if (a.cash + 0.005 < set.amount) {
-      warn.textContent = 'На рахунку вільних ' + usd(a.cash) + '. Заявку можна створити вже зараз, але IBKR виконає її лише тоді, коли гроші надійдуть.';
+      warn.replaceChildren('На рахунку вільних ' + usd(a.cash) + '. Заявку можна створити вже зараз, але IBKR виконає її лише тоді, коли гроші надійдуть. ',
+        h('a', { href: 'https://www.interactivebrokers.com/portal/', target: '_blank', rel: 'noopener', text: 'Поповнити в IBKR' }), ': Transfer & Pay → Transfer Funds → Deposit.');
       warn.hidden = false;
     } else warn.hidden = true;
     renderOrders();
@@ -788,7 +789,8 @@ a { color: var(--accent); }
       h('div', { class: 'pick-row' },
         h('label', { class: 'amt' }, h('span', { text: 'Сума, $' }), h('div', { class: 'amt-in' }, input)),
         h('span', { class: 'o-px', text: pxText }),
-        h('button', { class: 'linkish', type: 'button', text: 'Обрати інший', onclick: function () { S.pick = null; renderPick(); $('q').focus(); } })),
+        h('button', { class: 'linkish', type: 'button', text: 'Обрати інший', onclick: function () { S.pick = null; renderPick(); $('q').focus(); } }),
+        h('a', { class: 'linkish', href: 'https://matrix.tarasguk.com/t/' + encodeURIComponent(p.sym) + '/', target: '_blank', rel: 'noopener', text: 'Картка в Матриці' })),
       actionRow(p, key, 'Створити заявку на ' + p.sym));
     box.hidden = false;
   }

@@ -425,6 +425,7 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .pos-more dt { font-size: 12.5px; color: var(--muted); }
 .pos-more dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pos-more p { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.pos-more .pos-links a { font-weight: 500; }
 
 /* ---------- Варто знати ---------- */
 .facts {
