@@ -813,3 +813,7 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .bond-chip { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--card); cursor: pointer; font-size: 13px; font-weight: 600; }
 .bond-chip:hover { background: var(--accent-soft); }
 .tag-bond { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-style: normal; font-weight: 600; }
+
+.mini-chart { height: 112px; }
+.mini-axis { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.mini-grid-l { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }

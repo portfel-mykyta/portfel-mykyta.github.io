@@ -1717,7 +1717,7 @@
     }
     c.valEl.textContent = pxText(p.p, c.cur);
     var cls = p.dp == null ? '' : p.dp >= 0.0005 ? 'up-t' : p.dp <= -0.0005 ? 'down-t' : '';
-    append(c.subEl, [(p.live ? 'зараз' : dayLong(p.date)) + ': ', p.dp == null ? 'початок періоду' : h('span', { class: cls }, pctS(p.dp) + ' за день')]);
+    append(c.subEl, [(p.live ? 'зараз' : dayLongY(p.date)) + ': ', p.dp == null ? 'початок періоду' : h('span', { class: cls }, pctS(p.dp) + ' за день')]);
   }
   function drawMini(c, all, dates) {
     var box = c.chart;
@@ -1735,15 +1735,31 @@
       lo = Math.min(lo, t.price); hi = Math.max(hi, t.price);
     });
     if (hi - lo < hi * 0.02) { lo -= hi * 0.01 + 0.01; hi += hi * 0.01 + 0.01; }
-    var pad = 4;
-    var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - 2 * pad); };
-    var Y = function (v) { return pad + (1 - (v - lo) / (hi - lo)) * (H - 2 * pad); };
+    var pad = 4, padB = 18, padR = 44;   // знизу дати, справа ціни
+    var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - pad - padR); };
+    var Y = function (v) { return pad + (1 - (v - lo) / (hi - lo)) * (H - pad - padB); };
     var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    // Осі: 3 дати внизу, найвища й найнижча ціна справа
+    var span = (t1 - t0) / 864e5;
+    var dFmt = function (s) { var t = d(s); return span > 300 ? MON_SHORT[t.getUTCMonth()] + ' ' + String(t.getUTCFullYear()).slice(2) : t.getUTCDate() + ' ' + MON_SHORT[t.getUTCMonth()]; };
+    var mid = dates[Math.floor((dates.length - 1) / 2)];
+    [[dates[0], 'start'], [mid, 'middle'], [dates[dates.length - 1], 'end']].forEach(function (a) {
+      var t = sv('text', { x: X(a[0]), y: H - 4, 'text-anchor': a[1], class: 'mini-axis' });
+      t.textContent = dFmt(a[0]);
+      svg.appendChild(t);
+    });
+    var pf = function (v) { return v >= 1000 ? nf0.format(v) : v >= 100 ? v.toFixed(0) : v.toFixed(2); };
+    [[hi, pad + 8], [lo, H - padB]].forEach(function (a) {
+      var t = sv('text', { x: W - 2, y: a[1], 'text-anchor': 'end', class: 'mini-axis' });
+      t.textContent = '$' + pf(a[0]);
+      svg.appendChild(t);
+      svg.appendChild(sv('line', { x1: pad, x2: W - padR + 4, y1: Y(a[0]), y2: Y(a[0]), class: 'mini-grid-l' }));
+    });
     var line = c.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p.date).toFixed(1) + ' ' + Y(p.p).toFixed(1); }).join('');
-    var area = line + 'L' + X(c.pts[c.pts.length - 1].date).toFixed(1) + ' ' + (H - pad) + 'L' + X(c.pts[0].date).toFixed(1) + ' ' + (H - pad) + 'Z';
+    var area = line + 'L' + X(c.pts[c.pts.length - 1].date).toFixed(1) + ' ' + (H - padB) + 'L' + X(c.pts[0].date).toFixed(1) + ' ' + (H - padB) + 'Z';
     var a = sv('path', { d: area, class: 'mini-area' }); a.style.fill = c.color;
     var l = sv('path', { d: line, class: 'mini-line' }); l.style.stroke = c.color;
-    var cross = sv('line', { class: 'mini-cross', x1: 0, x2: 0, y1: 0, y2: H, visibility: 'hidden' });
+    var cross = sv('line', { class: 'mini-cross', x1: 0, x2: 0, y1: 0, y2: H - padB, visibility: 'hidden' });
     var dotEl = sv('circle', { r: 3.5, class: 'mini-dot', visibility: 'hidden' }); dotEl.style.fill = c.color;
     svg.append(a, l, cross, dotEl);
     Object.keys(byDay).sort().forEach(function (key) {
