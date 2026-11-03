@@ -827,3 +827,15 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .fold-head { display: flex; align-items: center; gap: 12px; }
 @media (prefers-reduced-motion: reduce) { .fold-btn .ic { transition: none; } }
 .collapsed { align-self: start !important; }
+
+/* Головна картка й «Ти проти ринку» на всю ширину */
+.hero, .market { grid-column: 1 / -1 !important; }
+@media (min-width: 860px) {
+  .hero {
+    display: grid; grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+    grid-template-areas: "top trend" "day trend"; column-gap: 40px; row-gap: 16px; align-items: start;
+  }
+  .hero-top { grid-area: top; }
+  .hero .trend { grid-area: trend; min-height: 240px; align-self: stretch; }
+  .hero .day { grid-area: day; align-self: end; }
+}
