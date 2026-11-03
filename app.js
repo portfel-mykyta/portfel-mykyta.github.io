@@ -1491,15 +1491,21 @@
     renderCloses(m);
   }
 
-  /* ---------- Кожен актив по днях: картки з графіками, спільний курсор ---------- */
-  function assetSeries(m, from) {
-    var S = m.snaps.filter(function (s) { return s.date >= from; });
-    if (m.data.live) {
-      var parts = {}, qty = {};
-      m.rows.forEach(function (r) { parts[r.sym] = r.value; qty[r.sym] = r.qty; });
-      S = S.concat([{ date: todayIso(), cash: m.other, parts: parts, qty: qty, live: true }]);
+  /* ---------- Кожен актив по днях: ринкова ціна однієї акції, спільний курсор ---------- */
+  // Ціни з денного звіту (data.px, Yahoo); якщо їх немає, ціна = вартість частки / кількість
+  function priceSeries(m, k, from) {
+    var px = (m.data.px || {})[k];
+    var pts = [];
+    if (px && px.length) px.forEach(function (r) { if (r[0] >= from && ok(r[1])) pts.push({ date: r[0], p: r[1] }); });
+    else m.snaps.forEach(function (s) { var v = s.parts[k], q = s.qty && s.qty[k]; if (s.date >= from && ok(v) && q) pts.push({ date: s.date, p: v / q }); });
+    var row = m.rows.filter(function (r) { return r.sym === k; })[0];
+    if (m.data.live && row && ok(row.price)) {
+      var today = todayIso();
+      pts = pts.filter(function (x) { return x.date < today; });
+      pts.push({ date: today, p: row.price, live: true });
     }
-    return S;
+    pts.forEach(function (x, i) { x.dp = i ? x.p / pts[i - 1].p - 1 : null; });
+    return pts;
   }
   function renderAssets(m) {
     var sec = $('assets');
@@ -1514,75 +1520,62 @@
       box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(p.id === pid), text: p.label,
         onclick: function () { store.set('portfel.aperiod', p.id); renderAssets(state.m); } }));
     });
-    var S = assetSeries(m, growthStart(pid, m));
+    $('assetsMeta').textContent = 'Ринкова ціна однієї акції на кожному закритті. Наведи на графік: усі картки покажуть той самий день.';
+    var from = growthStart(pid, m);
     var keys = [];
     m.rows.forEach(function (r) { keys.push(r.sym); });
-    S.forEach(function (s) { Object.keys(s.parts).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); }); });
+    m.snaps.forEach(function (s) { if (s.date >= from) Object.keys(s.parts).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); }); });
     var grid = $('miniGrid');
     grid.replaceChildren();
-    var cards = [];
+    var cards = [], dates = {};
     keys.forEach(function (k) {
+      var pts = priceSeries(m, k, from);
+      if (pts.length < 2) return;
+      pts.forEach(function (x) { dates[x.date] = 1; });
       var row = m.rows.filter(function (r) { return r.sym === k; })[0];
-      var pts = [], gain = 0, startV = null, prev = null;
-      S.forEach(function (s) {
-        var v = s.parts[k];
-        if (!ok(v)) { prev = null; return; }
-        var dg = null;
-        if (prev) {
-          var q = s.qty && s.qty[k], qp = prev.qty && prev.qty[k];
-          var px = ok(q) && q ? v / q : null;
-          dg = v - prev.parts[k] - (ok(q) && ok(qp) && ok(px) ? (q - qp) * px : 0);
-          gain += dg;
-        } else if (startV == null) startV = v;
-        pts.push({ date: s.date, v: v, dg: dg, live: !!s.live });
-        prev = s;
-      });
-      if (!pts.length) return;
       var color = colorOf(m.slot[k] || slotFor(m, k));
-      var last = pts[pts.length - 1];
       var name = row ? row.title : (NAMES[k] || k);
-      var valEl = h('b', { class: 'mini-val' }, money(usd(last.v)));
+      var valEl = h('b', { class: 'mini-val' });
       var subEl = h('span', { class: 'mini-sub' });
-      var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': name + ': вартість по днях' });
+      var ownEl = h('span', { class: 'mini-own', text: row ? 'у тебе ' + String(+Number(row.qty).toFixed(4)) + ' шт. на ' + usd(row.value) : 'продано, у тебе немає' });
+      var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': name + ': ціна однієї акції по днях' });
       var dot = h('i', { class: 'pdot' }); dot.style.background = color;
-      var card = h('article', { class: 'mini' + (row ? '' : ' sold') },
-        h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: name }), row ? null : h('small', { text: 'продано' })), valEl),
-        subEl, chart);
-      grid.append(card);
-      var basis = startV || (row && row.cost) || last.v;
-      var info = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, gain: gain, basis: basis, row: row };
-      cards.push(info);
-      setSub(info, null);
+      grid.append(h('article', { class: 'mini' + (row ? '' : ' sold') },
+        h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: name })), valEl),
+        subEl, chart, ownEl));
+      var c = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, cur: row && row.cur };
+      cards.push(c);
+      setSub(c, null);
     });
-    // Малюємо, коли картки вже мають розмір
-    requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, S); }); });
+    var allDates = Object.keys(dates).sort();
+    requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, allDates); }); });
   }
+  function pxText(v, cur) { return cur && cur !== 'USD' ? nf2.format(v) + ' ' + cur : usd(v); }
   function setSub(c, p) {
     c.subEl.replaceChildren();
     if (!p) {
-      var cls = c.gain >= 0.005 ? 'up-t' : c.gain <= -0.005 ? 'down-t' : '';
-      append(c.subEl, [h('span', { class: cls }, money(usdS(c.gain)), ' (' + pctS(c.basis ? c.gain / c.basis : null) + ')'), ' за період, без докупок']);
-      c.valEl.replaceChildren(money(usd(c.pts[c.pts.length - 1].v)));
+      var a = c.pts[0].p, b = c.pts[c.pts.length - 1].p, ch = b / a - 1;
+      c.valEl.textContent = pxText(b, c.cur);
+      append(c.subEl, [h('span', { class: ch >= 0.0005 ? 'up-t' : ch <= -0.0005 ? 'down-t' : '' }, pctS(ch)), ' за період, з ' + pxText(a, c.cur)]);
       return;
     }
-    c.valEl.replaceChildren(money(usd(p.v)));
-    var dcls = p.dg == null ? '' : p.dg >= 0.005 ? 'up-t' : p.dg <= -0.005 ? 'down-t' : '';
-    append(c.subEl, [(p.live ? 'зараз' : dayLong(p.date)) + ': ', p.dg == null ? 'перший день' : h('span', { class: dcls }, money(usdS(p.dg)), ' за день')]);
+    c.valEl.textContent = pxText(p.p, c.cur);
+    var cls = p.dp == null ? '' : p.dp >= 0.0005 ? 'up-t' : p.dp <= -0.0005 ? 'down-t' : '';
+    append(c.subEl, [(p.live ? 'зараз' : dayLong(p.date)) + ': ', p.dp == null ? 'початок періоду' : h('span', { class: cls }, pctS(p.dp) + ' за день')]);
   }
-  function drawMini(c, all, S) {
+  function drawMini(c, all, dates) {
     var box = c.chart;
     box.replaceChildren();
     var W = Math.max(180, box.clientWidth), H = Math.max(70, box.clientHeight);
-    var dates = S.map(function (s) { return s.date; });
     var t0 = d(dates[0]).getTime(), t1 = d(dates[dates.length - 1]).getTime();
     var lo = Infinity, hi = -Infinity;
-    c.pts.forEach(function (p) { lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); });
+    c.pts.forEach(function (p) { lo = Math.min(lo, p.p); hi = Math.max(hi, p.p); });
     if (hi - lo < hi * 0.02) { lo -= hi * 0.01 + 0.01; hi += hi * 0.01 + 0.01; }
     var pad = 4;
     var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - 2 * pad); };
     var Y = function (v) { return pad + (1 - (v - lo) / (hi - lo)) * (H - 2 * pad); };
     var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
-    var line = c.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p.date).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join('');
+    var line = c.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p.date).toFixed(1) + ' ' + Y(p.p).toFixed(1); }).join('');
     var area = line + 'L' + X(c.pts[c.pts.length - 1].date).toFixed(1) + ' ' + (H - pad) + 'L' + X(c.pts[0].date).toFixed(1) + ' ' + (H - pad) + 'Z';
     var a = sv('path', { d: area, class: 'mini-area' }); a.style.fill = c.color;
     var l = sv('path', { d: line, class: 'mini-line' }); l.style.stroke = c.color;
@@ -1595,8 +1588,8 @@
       var x = X(date);
       cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
       var p = c.pts.filter(function (q) { return q.date === date; })[0];
-      if (p) { dotEl.setAttribute('cx', x); dotEl.setAttribute('cy', Y(p.v)); dotEl.setAttribute('visibility', 'visible'); setSub(c, p); }
-      else { dotEl.setAttribute('visibility', 'hidden'); c.valEl.replaceChildren('н/д'); c.subEl.replaceChildren(dayLong(date) + ': не було в портфелі'); }
+      if (p) { dotEl.setAttribute('cx', x); dotEl.setAttribute('cy', Y(p.p)); dotEl.setAttribute('visibility', 'visible'); setSub(c, p); }
+      else { dotEl.setAttribute('visibility', 'hidden'); c.valEl.replaceChildren('н/д'); c.subEl.replaceChildren(dayLong(date) + ': немає ціни'); }
     };
     function pick(clientX) {
       var r = box.getBoundingClientRect();

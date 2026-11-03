@@ -782,3 +782,4 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .mini-dot { stroke: var(--paper); stroke-width: 2; vector-effect: non-scaling-stroke; }
 #aPeriods { max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 @media (max-width: 560px) { #aPeriods { width: 100%; } #aPeriods button { flex: 1 0 auto; padding: 0 6px; font-size: 12.5px; } }
+.mini-own { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }

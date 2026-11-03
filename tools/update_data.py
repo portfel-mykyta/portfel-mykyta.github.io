@@ -580,6 +580,32 @@ def build(stmt, prev, bench, uah, now, prices=None, full=None):
     }
 
 
+def market_prices(stmt, prev, oldest, now, offline=False):
+    """Ринкова ціна однієї акції кожного паперу, який був у рахунку, на кожному закритті:
+    {тікер: [[дата, ціна], ...]} з дня відкриття рахунку. Без мережі лишаються попередні."""
+    old = (prev or {}).get('px') or {}
+    if offline:
+        return old
+    exch = {}
+    for p in stmt['positions']:
+        exch.setdefault(p['sym'], p.get('exch') or '')
+    for t in stmt['trades']:
+        if t.get('kind') != 'CASH' and t.get('sym'):
+            exch.setdefault(t['sym'], t.get('exch') or '')
+    for sym in old:
+        exch.setdefault(sym, '')
+    out = {}
+    for sym, ex in sorted(exch.items()):
+        got = fetch_yahoo(yahoo_ticker(sym, ex), rng=_years_back(oldest, now), adjusted=False)
+        rows = [r for r in got[0] if r[0] >= oldest] if got else None
+        if rows:
+            out[sym] = rows
+        elif sym in old:
+            out[sym] = old[sym]
+            log('Ціни %s: Yahoo не відповів, лишаю попередні.' % sym)
+    return out
+
+
 # ---------------------------------------------------------------- шифрування
 
 def _b64(b):
@@ -717,6 +743,7 @@ def main():
                     prices[sym] = got[0]
 
     data = build(stmt, prev, bench, uah, now, prices, full)
+    data['px'] = market_prices(stmt, prev, oldest, now, offline=args.offline)
     env = encrypt(data, password, salt)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as f:
