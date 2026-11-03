@@ -312,7 +312,9 @@ a { color: var(--accent); }
   'use strict';
   var P = window.PortfelPlan;
   var SERVER = 'Interactive Brokers (IBKR)';
-  var $ = function (id) { return document.getElementById(id); };
+  // Усередині Портфеля в Claude id елементів мають префікс, щоб не збігатися з Портфелевими
+  var PFX = window.KUPIVLIA_PREFIX || '';
+  var $ = function (id) { return document.getElementById(PFX + id); };
   var NAMES = {
     AAPL: 'Apple', TSLA: 'Tesla', MSFT: 'Microsoft', NVDA: 'Nvidia', AMZN: 'Amazon', GOOGL: 'Alphabet', GOOG: 'Alphabet',
     META: 'Meta', AVGO: 'Broadcom', 'BRK.B': 'Berkshire Hathaway', LLY: 'Eli Lilly', KO: 'Coca-Cola', ORCL: 'Oracle',
@@ -635,7 +637,8 @@ a { color: var(--accent); }
     rerender(key);
   }
   function rerender(key) {
-    if (key.indexOf('pick:') === 0) renderPick(); else renderOrders();
+    if (key.indexOf('ext:') === 0) { if (S.extRender) S.extRender(); }
+    else if (key.indexOf('pick:') === 0) renderPick(); else renderOrders();
   }
 
   /* ---------- План ---------- */
@@ -875,6 +878,25 @@ a { color: var(--accent); }
   window.addEventListener('hashchange', function () { if (applyHash()) renderPlan(); });
   renderControls();
 
+  // Для Портфеля в Claude: його план поповнення створює заявки тими самими кнопками
+  var readyResolve;
+  var ready = new Promise(function (r) { readyResolve = r; });
+  window.PortfelBuy = {
+    ready: ready,
+    actionRow: function (o, label) { return actionRow(o, 'ext:' + orderKey(o), label); },
+    onChange: function (fn) { S.extRender = fn; },
+    priceText: function (o) {
+      var px = S.prices[String(o.conid)];
+      if (!px) { priceOf(o.conid, o.exch).then(function () { if (S.extRender) S.extRender(); }).catch(function () { /* без ціни */ }); return 'ціну уточнюю…'; }
+      return px.ref > 0 ? '≈ ' + nfq.format(qtyFor(o.amount, limitFor(px.ref, o.venue))) + ' шт. по ' + usd(px.ref) : 'зараз немає ціни';
+    },
+    buySym: function (sym) { $('q').value = sym; find(sym); },
+    account: async function (fresh) {
+      return { pos: pl(await read('get_account_positions', {}, fresh)), sum: pl(await read('get_account_summary', {}, fresh)) };
+    },
+    reload: function () { S.prices = {}; return loadAccount(true); }
+  };
+
   (async function boot() {
     var mcp = null;
     try { mcp = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('mcp') : null; } catch (e) { mcp = null; }
@@ -883,6 +905,7 @@ a { color: var(--accent); }
       $('acct').replaceChildren(h('span', null, h('i', { class: 'dot off' }), 'Немає зв\'язку з IBKR'));
       $('orders').replaceChildren(h('li', { class: 'empty', text: 'Без зв\'язку з IBKR план не порахувати.' }));
       $('pend').replaceChildren(h('li', { class: 'empty', text: 'Без зв\'язку з IBKR список недоступний.' }));
+      readyResolve(null);
       return;
     }
     S.mcp = mcp;
@@ -893,6 +916,7 @@ a { color: var(--accent); }
       if (found) SERVER = found.server;
     } catch (e) { /* лишається типова назва */ }
     try { S.perm = await window.claude.use('permissions'); } catch (e) { S.perm = null; }
+    readyResolve(mcp);
     loadAccount(false);
   })();
 })();

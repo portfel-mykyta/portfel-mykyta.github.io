@@ -714,3 +714,19 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
   .bar, .notices, .tableview, .about-actions { display: none !important; }
   body { background: #fff; }
 }
+
+/* ---------- Портфель у Claude: заявки прямо з плану ---------- */
+.plan-orders { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.plan-orders li { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--card); }
+.po-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.po-head b { font-size: 18px; font-weight: 650; color: var(--accent); font-variation-settings: 'SHRP' 100; }
+.po-head span { font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.o-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.o-act .done { display: inline-flex; align-items: center; gap: 6px; color: var(--up); font-weight: 600; font-size: 14px; }
+.o-act .done svg, .o-act .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.o-act .err { color: var(--down); font-size: 14px; flex-basis: 100%; }
+.o-act .hint { color: var(--ink-2); font-size: 13px; flex-basis: 100%; }
+.btn[disabled] { opacity: .55; cursor: default; }
+.buy { grid-column: 1 / -1; }
+.plan-body > *, .plan-buy, .plan-orders li { min-width: 0; }
+.plan-orders .btn { white-space: normal; text-align: center; }

@@ -12,7 +12,10 @@
   var README_URL = 'https://github.com/portfel-mykyta/portfel-mykyta.github.io#readme';
   var ACTIONS_URL = 'https://github.com/portfel-mykyta/portfel-mykyta.github.io/actions/workflows/update-data.yml';
   var LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  var SRC = (LOCAL && new URLSearchParams(location.search).get('src')) || DATA_URL;
+  // У Claude Портфель живе як артефакт: історія з опублікованого поруч файла, поточні цифри
+  // й купівля через конектор Interactive Brokers (код «Купівлі» вбудовано в ту саму сторінку)
+  var ART = !!window.PORTFEL_IN_CLAUDE;
+  var SRC = ART ? 'data.enc.json' : (LOCAL && new URLSearchParams(location.search).get('src')) || DATA_URL;
   var K = {
     key: 'portfel.key', theme: 'portfel.theme', privacy: 'portfel.privacy', period: 'portfel.period', gperiod: 'portfel.growthPeriod',
     drawn: 'portfel.drawn', ios: 'portfel.iosHintClosed', snap: 'portfel.snapshotHintClosed',
@@ -353,6 +356,9 @@
       day = { date: b.date, abs: dv, pct: a.nav > 0 ? dv / a.nav : null };
     }
 
+    if (data.live && ok(data.live.day) && nav > 0) {
+      day = { date: todayIso(), abs: data.live.day, pct: nav - data.live.day > 0 ? data.live.day / (nav - data.live.day) : null, live: true };
+    }
     var bench = (data.bench && data.bench.s) || [];
     var asOf = data.asOf || (hist.length ? hist[hist.length - 1].date : todayIso());
     var year = asOf.slice(0, 4);
@@ -455,6 +461,11 @@
 
   /* ---------- Малювання сторінки ---------- */
   function show(data) {
+    state.base = data;
+    paint(state.live ? overlay(data, state.live) : data);
+    if (ART) goLive(false);
+  }
+  function paint(data) {
     state.data = data;
     state.m = buildModel(data);
     showOnly('app');
@@ -463,6 +474,55 @@
       root.classList.add('reveal');
       store.set(K.drawn, '1', true);
     }
+  }
+
+  /* ---------- Живі дані IBKR (лише в Claude) ---------- */
+  // Позиції, вартість рахунку й вільні гроші зараз; історія лишається з денного звіту
+  function goLive(fresh) {
+    var B = window.PortfelBuy;
+    if (!ART || !B) return Promise.resolve(false);
+    return B.ready.then(function (mcp) {
+      if (!mcp) return false;
+      return B.account(fresh).then(function (L) {
+        state.live = { pos: L.pos, sum: L.sum, at: Date.now() };
+        if (state.base) paint(overlay(state.base, state.live));
+        return true;
+      });
+    }).catch(function () { return false; });
+  }
+  function overlay(data, L) {
+    var d = Object.assign({}, data);
+    var old = {};
+    (data.positions || []).forEach(function (p) { old[p.sym] = p; });
+    var day = 0;
+    var list = (L.pos && L.pos.positions) || [];
+    d.positions = list.filter(function (p) { return p && Number(p.market_value) > 0 && (!p.asset_class || p.asset_class === 'STK'); }).map(function (p) {
+      var sym = String(p.contract_description || '').trim().split(/\s+/)[0].toUpperCase();
+      var o = old[sym] || {};
+      var qty = Number(p.position), val = Number(p.market_value), avg = Number(p.average_price);
+      var dp = Number(p.daily_pnl);
+      if (ok(dp)) day += dp;
+      var cost = ok(avg) && ok(qty) ? avg * qty : o.cost;
+      var pnl = Number(p.unrealized_pnl);
+      return {
+        sym: sym, name: o.name || sym, kind: o.kind || (PP.typeOf(sym, false) === 'stock' ? 'stock' : 'etf'),
+        qty: qty, price: Number(p.market_price), value: val, cost: cost, pnl: ok(pnl) ? pnl : val - cost,
+        cur: p.currency || o.cur || 'USD', exch: o.exch || '', isin: o.isin || ''
+      };
+    });
+    var sm = L.sum || {};
+    if (ok(Number(sm.net_liquidation)) && Number(sm.net_liquidation) > 0) d.nav = Number(sm.net_liquidation);
+    if (ok(Number(sm.total_cash_value))) d.cash = Number(sm.total_cash_value);
+    d.live = { at: L.at, day: day };
+    // Поповнення після останнього денного звіту: приріст рахунку понад сьогоднішній заробіток.
+    // Без цього нові гроші виглядали б як прибуток, доки звіт IBKR їх не покаже.
+    var hist = data.history || [];
+    var last = hist.length ? hist[hist.length - 1] : null;
+    if (last && ok(d.nav) && daysBetween(last[0], todayIso()) <= 4) {
+      var flow = d.nav - last[1] - day;
+      if (flow > 1) { d.history = hist.concat([[todayIso(), d.nav, Math.round(flow * 100) / 100]]); d.live.flow = flow; }
+    }
+    return d;
   }
 
   function renderAll() {
@@ -486,6 +546,12 @@
     var dot = $('freshDot');
     dot.className = 'fresh-dot' + (state.offline ? ' off' : age > 4 ? ' old' : '');
     $('freshText').textContent = (state.offline ? 'Офлайн, дані на ' : 'Дані на ') + dayLong(m.asOf);
+    if (m.data.live) {
+      dot.className = 'fresh-dot';
+      $('freshText').textContent = 'Живі дані IBKR, ' + new Date(m.data.live.at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      $('fresh').title = 'Позиції й вартість рахунку зараз; історія до закриття ' + dayLongY(m.asOf);
+      return;
+    }
     $('fresh').title = 'Закриття біржі ' + dayLongY(m.asOf) + (m.data.generated ? '. Оновлено ' + stamp(m.data.generated) : '');
   }
   function stamp(isoTs) {
@@ -503,7 +569,7 @@
     if (m.data.source === 'snapshot' && !store.get(K.snap)) {
       box.append(notice('i-refresh', '', ['Це знімок рахунку на ' + dayLong(m.asOf) + '. Щоб цифри оновлювались самі щодня, налаштуй звіт IBKR: ',
         h('a', { href: README_URL, target: '_blank', rel: 'noopener', text: 'інструкція на 10 хвилин' }), '.'], K.snap));
-    } else if (m.data.source !== 'snapshot' && age > 4) {
+    } else if (m.data.source !== 'snapshot' && age > 4 && !m.data.live) {
       box.append(notice('i-refresh', 'warn', ['Дані на ' + dayLong(m.asOf) + '. Схоже, щоденне оновлення зупинилось. ',
         h('a', { href: ACTIONS_URL, target: '_blank', rel: 'noopener', text: 'Перевір GitHub Actions' }), '.']));
     }
@@ -553,7 +619,7 @@
     var dl = $('dayLine');
     if (m.day && ok(m.day.abs)) {
       var up = m.day.abs >= 0;
-      dl.replaceChildren('Останній день торгів, ' + dayLong(m.day.date) + ': ',
+      dl.replaceChildren(m.day.live ? 'Сьогодні за даними IBKR: ' : 'Останній день торгів, ' + dayLong(m.day.date) + ': ',
         h('b', { class: up ? 'up-t' : 'down-t' }, money(usdS(m.day.abs)), ' (' + pctS(m.day.pct) + ')'));
       dl.hidden = false;
     } else dl.hidden = true;
@@ -955,7 +1021,8 @@
     var links = r.fund ? null : h('p', { class: 'pos-links' },
       h('a', { href: MATRIX_URL + 't/' + encodeURIComponent(r.sym) + '/', target: '_blank', rel: 'noopener' }, 'Картка ' + r.sym + ' у Матриці'),
       ' · ',
-      h('a', { href: KUPIVLIA_URL, target: '_blank', rel: 'noopener' }, 'Докупити'));
+      ART ? h('a', { href: '#buy', onclick: function (e) { e.preventDefault(); if (window.PortfelBuy) window.PortfelBuy.buySym(r.sym); $('buy').scrollIntoView({ behavior: 'smooth' }); } }, 'Докупити')
+        : h('a', { href: KUPIVLIA_URL, target: '_blank', rel: 'noopener' }, 'Докупити'));
     return [dl, extra.length ? h('p', { text: extra.join(' ') }) : null, links];
   }
   function cashItem(m) {
@@ -1143,7 +1210,20 @@
     });
     var why = PP.notes(P);
 
-    out.append(h('div', { class: 'plan-buy' },
+    if (ART && window.PortfelBuy) {
+      window.PortfelBuy.onChange(function () { drawPlan(state.m); });
+      out.append(h('div', { class: 'plan-buy' },
+        h('p', { class: 'plan-what' }, what),
+        h('p', { class: 'plan-why', text: why.join(' ') }),
+        h('ul', { class: 'plan-orders' }, P.orders.map(function (o) {
+          return h('li', null,
+            h('div', { class: 'po-head' }, h('b', { text: o.sym }), h('span', { text: usd(o.amount) + ' · ' + window.PortfelBuy.priceText(o) })),
+            window.PortfelBuy.actionRow(o, 'Створити заявку на ' + o.sym));
+        })),
+        h('div', { class: 'plan-act' },
+          h('a', { class: 'btn ghost', href: DEPOSIT_URL, target: '_blank', rel: 'noopener' }, 'Поповнити рахунок', icon('i-out')),
+          h('span', { class: 'plan-act-note', text: 'Заявка нічого не купує, поки ти не відкриєш її в IBKR і не натиснеш Submit. Поповнення в IBKR: Transfer & Pay → Transfer Funds → Deposit.' }))));
+    } else out.append(h('div', { class: 'plan-buy' },
       h('p', { class: 'plan-what' }, what),
       h('p', { class: 'plan-why', text: why.join(' ') }),
       h('div', { class: 'plan-act' },
@@ -1756,6 +1836,19 @@
     var btn = $('refreshBtn');
     if (btn.classList.contains('spin')) return;
     btn.classList.add('spin');
+    if (ART) {
+      fetchEnvelope(true).then(function (env) {
+        if (!isEnvelope(env) || (state.env && env.data === state.env.data)) return;
+        state.env = env;
+        return savedKey(env).then(function (key) { return key && decrypt(key, env).then(function (data) { state.base = data; }); });
+      }).catch(function () { /* історія лишається попередня */ }).then(function () {
+        return goLive(true);
+      }).then(function (ok2) {
+        if (!ok2 && state.base) paint(state.base);
+        if (!silent) toast(ok2 ? 'Живі дані IBKR оновлено' : 'IBKR зараз не відповідає, показую денний звіт');
+      }).then(function () { btn.classList.remove('spin'); });
+      return;
+    }
     fetchEnvelope(true).then(function (env) {
       if (!isEnvelope(env)) {
         if (LOCAL && env && env.positions) { show(env); return; }
@@ -1772,7 +1865,7 @@
   }
   $('refreshBtn').addEventListener('click', function () { refresh(false); });
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && state.data && Date.now() - state.fetchedAt > 30 * 60e3) refresh(true);
+    if (document.visibilityState === 'visible' && state.data && Date.now() - state.fetchedAt > (ART ? 5 : 30) * 60e3) { state.fetchedAt = Date.now(); refresh(true); }
   });
   $('fatalRetry').addEventListener('click', start);
   $('forgetBtn').addEventListener('click', function () {
@@ -1811,14 +1904,14 @@
 
   /* ---------- Встановлення як застосунок ---------- */
   var deferred = null;
-  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; $('installBtn').hidden = false; });
+  if (!ART) window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; $('installBtn').hidden = false; });
   window.addEventListener('appinstalled', function () { deferred = null; $('installBtn').hidden = true; toast('Портфель встановлено'); });
   $('installBtn').addEventListener('click', function () {
     if (!deferred) return;
     deferred.prompt();
     deferred.userChoice.then(function () { deferred = null; $('installBtn').hidden = true; });
   });
-  if ('serviceWorker' in navigator) {
+  if (!ART && 'serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () { /* без офлайну */ }); });
   }
 
