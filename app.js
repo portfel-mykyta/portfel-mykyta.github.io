@@ -373,13 +373,13 @@
 
     // Вартість кожного активу на закритті біржі: [дата, гроші, {тікер: [кількість, вартість]}]
     var snaps = (data.snaps || []).map(function (s) {
-      var parts = {}, total = 0;
+      var parts = {}, qty = {}, total = 0;
       Object.keys(s[2] || {}).forEach(function (k) {
         var v = s[2][k] && s[2][k][1];
-        if (ok(v) && Math.abs(v) >= 0.005) { parts[k] = v; total += v; }
+        if (ok(v) && Math.abs(v) >= 0.005) { parts[k] = v; qty[k] = s[2][k][0]; total += v; }
       });
       var c = ok(s[1]) ? s[1] : 0;
-      return { date: s[0], cash: c, parts: parts, total: total + c };
+      return { date: s[0], cash: c, parts: parts, qty: qty, total: total + c };
     }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
     var navByDate = {};
     hist.forEach(function (r) { navByDate[r.date] = r.nav; });
@@ -1601,7 +1601,77 @@
   }
 
   // Усі закриття таблицею: вартість рахунку, зміна за день без поповнень, поповнення
+  // Кожен актив на кожному закритті: вартість і зміна за день без докупок і продажів
+  function assetDays(m) {
+    var S = m.snaps.slice();
+    if (m.data.live) {
+      var parts = {}, qty = {};
+      m.rows.forEach(function (r) { parts[r.sym] = r.value; qty[r.sym] = r.qty; });
+      S.push({ date: 'now', cash: m.other, parts: parts, qty: qty, live: true });
+    }
+    var syms = [];
+    m.rows.forEach(function (r) { syms.push(r.sym); });
+    S.forEach(function (s) { Object.keys(s.parts).forEach(function (k) { if (syms.indexOf(k) < 0) syms.push(k); }); });
+    var rows = S.map(function (s, i) {
+      var prev = i > 0 ? S[i - 1] : null;
+      var cells = {};
+      syms.forEach(function (k) {
+        var v = s.parts[k];
+        if (!ok(v)) return;
+        var chg = null;
+        if (prev && ok(prev.parts[k]) && prev.parts[k] > 0) {
+          var q = s.qty && s.qty[k], qp = prev.qty && prev.qty[k];
+          var px = ok(q) && q ? v / q : null;
+          var bought = ok(q) && ok(qp) && ok(px) ? (q - qp) * px : 0;
+          chg = { abs: v - prev.parts[k] - bought, pct: (v - prev.parts[k] - bought) / prev.parts[k] };
+        }
+        cells[k] = { v: v, chg: chg };
+      });
+      return { date: s.date, live: s.live, cells: cells, cash: s.cash };
+    });
+    return { syms: syms, rows: rows.reverse() };
+  }
+  function renderAssetTable(m) {
+    var A = assetDays(m);
+    var t = $('assetTable');
+    var title = function (k) { var r = m.rows.filter(function (x) { return x.sym === k; })[0]; return r ? r.title : (NAMES[k] || k); };
+    t.tHead.replaceChildren(h('tr', null, h('th', { scope: 'col', text: 'Дата' }),
+      A.syms.map(function (k) { return h('th', { scope: 'col', text: title(k) }); }), h('th', { scope: 'col', text: 'Гроші' })));
+    var tb = t.tBodies[0];
+    tb.replaceChildren();
+    A.rows.slice(0, state.closesShown).forEach(function (r) {
+      tb.append(h('tr', { class: r.live ? 'live' : '' },
+        h('td', { text: r.live ? 'Зараз' : dayShort(r.date) + (r.date.slice(0, 4) === m.year ? '' : ' ' + r.date.slice(0, 4)) }),
+        A.syms.map(function (k) {
+          var c = r.cells[k];
+          if (!c) return h('td', { class: 'nil', text: '' });
+          var cls = c.chg && Math.abs(c.chg.abs) >= 0.005 ? (c.chg.abs > 0 ? 'up-t' : 'down-t') : '';
+          return h('td', { class: 'day-chg' }, money(usd(c.v)), c.chg ? h('small', { class: cls, text: pctS(c.chg.pct) }) : null);
+        }),
+        h('td', null, money(usd(r.cash)))));
+    });
+    return A.rows.length;
+  }
+
   function renderCloses(m) {
+    var mode = store.get('portfel.closesMode') || 'acct';
+    var chips = $('closesMode');
+    chips.replaceChildren();
+    [['acct', 'Рахунок'], ['assets', 'Кожен актив']].forEach(function (x) {
+      chips.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(mode === x[0]), text: x[1],
+        onclick: function () { store.set('portfel.closesMode', x[0]); renderCloses(state.m); } }));
+    });
+    var assets = mode === 'assets';
+    $('assetWrap').hidden = !assets;
+    $('closesTable').closest('.table-wrap').hidden = assets;
+    if (assets) {
+      var n = renderAssetTable(m);
+      var mb = $('closesMore');
+      mb.hidden = n <= state.closesShown;
+      mb.textContent = 'Показати ще (усього ' + n + ')';
+      mb.onclick = function () { state.closesShown += 30; renderCloses(state.m); };
+      return;
+    }
     var tb = $('closesTable').tBodies[0];
     tb.replaceChildren();
     var rows = m.hist.slice().reverse();

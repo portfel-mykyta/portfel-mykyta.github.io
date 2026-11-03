@@ -226,7 +226,13 @@
         <div class="growth-main">
           <div class="chart gchart" id="gChart" tabindex="0" role="img"></div>
           <div class="closes">
-            <h3 class="closes-title">Записи на закритті біржі</h3>
+            <div class="closes-head">
+              <h3 class="closes-title">Записи на закритті біржі</h3>
+              <div class="chips" id="closesMode" role="radiogroup" aria-label="Що показати"></div>
+            </div>
+            <div class="table-wrap" id="assetWrap" hidden>
+              <table class="tbl asset-tbl" id="assetTable"><thead></thead><tbody></tbody></table>
+            </div>
             <div class="table-wrap">
               <table class="tbl" id="closesTable">
                 <thead><tr><th scope="col">Дата</th><th scope="col">Рахунок</th><th scope="col">За день</th><th scope="col">Поповнення</th></tr></thead>

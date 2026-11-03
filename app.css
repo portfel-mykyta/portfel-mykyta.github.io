@@ -753,3 +753,12 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .dep-copy button { min-height: 30px; padding: 0 10px; font-size: 13px; }
 .dep-wire { width: 100%; min-height: 110px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--card); font: inherit; font-size: 14px; color: inherit; }
 @media (max-width: 560px) { .dep-copy li { grid-template-columns: minmax(0, 1fr) auto; } .dep-copy span:first-child { grid-column: 1 / -1; } }
+
+/* Записи на закритті: рахунок або кожен актив */
+.closes-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.closes-head .chips button { min-height: 30px; font-size: 13px; }
+.asset-tbl td.day-chg small { display: block; font-size: 11.5px; color: var(--muted); }
+.asset-tbl td.day-chg small.up-t { color: var(--up); }
+.asset-tbl td.day-chg small.down-t { color: var(--down); }
+.asset-tbl tr.live td { font-weight: 600; }
+.asset-tbl th:first-child, .asset-tbl td:first-child { position: sticky; left: 0; background: var(--card); }
