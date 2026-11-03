@@ -1737,11 +1737,11 @@
 
   /* ---------- Оновлення ---------- */
   var toastTimer = null;
-  function toast(text) {
+  function toast(text, ms) {
     var t = $('toast');
     t.textContent = text; t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+    toastTimer = setTimeout(function () { t.hidden = true; }, ms || 2600);
   }
   function refresh(silent) {
     var btn = $('refreshBtn');
@@ -1752,7 +1752,7 @@
         if (LOCAL && env && env.positions) { show(env); return; }
         throw new Error('format');
       }
-      if (state.env && env.data === state.env.data) { renderFresh(state.m); if (!silent) toast(state.offline ? 'Немає зв\'язку, показую збережене' : 'Нових даних ще немає'); return; }
+      if (state.env && env.data === state.env.data) { renderFresh(state.m); if (!silent) toast(state.offline ? 'Немає зв\'язку, показую збережене' : 'Нових даних ще немає. Їх готує GitHub у будні зранку, іноді на кілька годин пізніше', 6000); return; }
       state.env = env;
       return savedKey(env).then(function (key) {
         if (!key) { showLock(true); return; }
