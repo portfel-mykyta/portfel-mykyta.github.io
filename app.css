@@ -783,3 +783,12 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 #aPeriods { max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 @media (max-width: 560px) { #aPeriods { width: 100%; } #aPeriods button { flex: 1 0 auto; padding: 0 6px; font-size: 12.5px; } }
 .mini-own { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.trade-mark { cursor: pointer; outline: none; }
+.trade-mark .hit { fill: transparent; }
+.trade-mark .pt { stroke: var(--card); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.trade-mark.buy .pt { fill: var(--up); }
+.trade-mark.sell .pt { fill: var(--down); }
+.trade-mark:hover .pt, .trade-mark:focus .pt { stroke: var(--ink); }
+.mini-legend { display: inline-flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.mini-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }

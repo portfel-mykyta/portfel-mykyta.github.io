@@ -1520,7 +1520,9 @@
       box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(p.id === pid), text: p.label,
         onclick: function () { store.set('portfel.aperiod', p.id); renderAssets(state.m); } }));
     });
-    $('assetsMeta').textContent = 'Ринкова ціна однієї акції на кожному закритті. Наведи на графік: усі картки покажуть той самий день.';
+    var meta = $('assetsMeta');
+    meta.replaceChildren('Ринкова ціна однієї акції на кожному закритті. Наведи на графік: усі картки покажуть той самий день. ',
+      h('span', { class: 'mini-legend' }, h('span', null, h('i', { style: 'background:var(--up)' }), 'купівля'), h('span', null, h('i', { style: 'background:var(--down)' }), 'продаж')));
     var from = growthStart(pid, m);
     var keys = [];
     m.rows.forEach(function (r) { keys.push(r.sym); });
@@ -1570,6 +1572,14 @@
     var t0 = d(dates[0]).getTime(), t1 = d(dates[dates.length - 1]).getTime();
     var lo = Infinity, hi = -Infinity;
     c.pts.forEach(function (p) { lo = Math.min(lo, p.p); hi = Math.max(hi, p.p); });
+    // Угоди цього паперу в межах графіка, згруповані по днях
+    var first = c.pts[0].date, lastD = c.pts[c.pts.length - 1].date;
+    var byDay = {};
+    (state.m.trades || []).forEach(function (t) {
+      if (t.sym !== c.k || t.kind === 'CASH' || !t.d || t.d < first || t.d > lastD || !ok(t.price)) return;
+      (byDay[t.d + '|' + t.side] = byDay[t.d + '|' + t.side] || []).push(t);
+      lo = Math.min(lo, t.price); hi = Math.max(hi, t.price);
+    });
     if (hi - lo < hi * 0.02) { lo -= hi * 0.01 + 0.01; hi += hi * 0.01 + 0.01; }
     var pad = 4;
     var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - 2 * pad); };
@@ -1582,6 +1592,32 @@
     var cross = sv('line', { class: 'mini-cross', x1: 0, x2: 0, y1: 0, y2: H, visibility: 'hidden' });
     var dotEl = sv('circle', { r: 3.5, class: 'mini-dot', visibility: 'hidden' }); dotEl.style.fill = c.color;
     svg.append(a, l, cross, dotEl);
+    Object.keys(byDay).sort().forEach(function (key) {
+      var ts = byDay[key], side = ts[0].side, buy = side === 'BUY';
+      var q = sum(ts, function (t) { return t.qty; });
+      var amt = sum(ts, function (t) { return Math.abs(t.qty * t.price); });
+      var fee = sum(ts, function (t) { return t.fee; });
+      var pnl = sum(ts, function (t) { return t.pnl; });
+      var avg = q ? amt / q : ts[0].price;
+      var x = X(ts[0].d), y = Y(avg);
+      var g = sv('g', { class: 'trade-mark ' + (buy ? 'buy' : 'sell'), tabindex: '0' });
+      g.append(sv('circle', { cx: x, cy: y, r: 11, class: 'hit' }), sv('circle', { cx: x, cy: y, r: 5, class: 'pt' }));
+      var lines = function () {
+        var out = [[null, (buy ? 'Купівля, ' : 'Продаж, ') + dayLongY(ts[0].d)],
+          [null, String(+q.toFixed(4)) + ' шт. по ' + pxText(avg, ts[0].cur)],
+          [null, (buy ? 'Сума покупки ' : 'Отримано ') + usd(amt)],
+          [null, 'Комісія ' + usd(fee)]];
+        if (!buy && Math.abs(pnl) >= 0.005) out.push([null, (pnl >= 0 ? 'Прибуток ' : 'Збиток ') + usd(Math.abs(pnl))]);
+        if (ts.length > 1) out.push([null, ts.length + ' ' + plural(ts.length, ['угода', 'угоди', 'угод']) + ' за день']);
+        return out;
+      };
+      g.addEventListener('pointerenter', function (e) { e.stopPropagation(); tipShow(e.clientX, e.clientY, lines()); });
+      g.addEventListener('pointermove', function (e) { tipMove(e.clientX, e.clientY); });
+      g.addEventListener('pointerleave', tipHide);
+      g.addEventListener('focus', function () { var r = g.getBoundingClientRect(); tipShow(r.left + r.width / 2, r.top, lines()); });
+      g.addEventListener('blur', tipHide);
+      svg.append(g);
+    });
     box.append(svg);
     c.show = function (date) {
       if (!date) { cross.setAttribute('visibility', 'hidden'); dotEl.setAttribute('visibility', 'hidden'); setSub(c, null); return; }
