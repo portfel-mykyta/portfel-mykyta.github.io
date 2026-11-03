@@ -1549,8 +1549,113 @@
       cards.push(c);
       setSub(c, null);
     });
+    // Спостереження: папери, яких у тебе немає (лише в Claude: ціни з IBKR)
+    if (ART) {
+      $('watchForm').hidden = false;
+      watchList().forEach(function (w) {
+        if (keys.indexOf(w.sym) >= 0) return;
+        var hist = watchCache[w.conid];
+        if (!hist) { loadWatch(w); return; }
+        var pts = hist.filter(function (x) { return x.date >= from; }).map(function (x) { return { date: x.date, p: x.p }; });
+        if (pts.length < 2) return;
+        pts.forEach(function (x, i) { x.dp = i ? x.p / pts[i - 1].p - 1 : null; dates[x.date] = 1; });
+        var valEl = h('b', { class: 'mini-val' }), subEl = h('span', { class: 'mini-sub' });
+        var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': w.sym + ': ціна однієї акції по днях' });
+        var dot = h('i', { class: 'pdot' }); dot.style.background = 'var(--mkt)';
+        grid.append(h('article', { class: 'mini watch' },
+          h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: w.sym }), h('small', { text: 'спостереження' })), valEl),
+          subEl, chart,
+          h('span', { class: 'mini-acts' },
+            h('button', { class: 'linkish', type: 'button', text: 'Аналіз', onclick: function () { analyze(w.sym, w.name, pts); } }),
+            h('button', { class: 'linkish', type: 'button', text: 'Купити', onclick: function () { if (window.PortfelBuy) window.PortfelBuy.buySym(w.sym); $('buy').scrollIntoView({ behavior: 'smooth' }); } }),
+            h('button', { class: 'linkish', type: 'button', text: 'Прибрати', onclick: function () { watchSave(watchList().filter(function (x) { return x.conid !== w.conid; })); renderAssets(state.m); } }))));
+        var c = { k: w.sym, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: 'var(--mkt)' };
+        cards.push(c); setSub(c, null);
+      });
+      // «Аналіз» і для твоїх паперів
+      cards.forEach(function (c) {
+        var art = c.chart.parentNode;
+        if (art.classList.contains('watch')) return;
+        var own = art.querySelector('.mini-own');
+        own.append(' · ', h('button', { class: 'linkish', type: 'button', text: 'Аналіз', onclick: function () { analyze(c.k, NAMES[c.k] || c.k, c.pts); } }));
+      });
+    }
     var allDates = Object.keys(dates).sort();
     requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, allDates); }); });
+  }
+
+  /* ---------- Спостереження й аналіз (лише в Claude) ---------- */
+  var watchCache = {}, watchLoading = {};
+  function watchList() { try { return JSON.parse(store.get('portfel.watch') || '[]') || []; } catch (e) { return []; } }
+  function watchSave(list) { store.set('portfel.watch', JSON.stringify(list)); }
+  function loadWatch(w) {
+    var B = window.PortfelBuy;
+    if (!B || !B.read || watchLoading[w.conid]) return;
+    watchLoading[w.conid] = true;
+    B.ready.then(function (mcp) {
+      if (!mcp) return null;
+      return B.read('get_price_history', { contract_id: Number(w.conid), security_type: 'STK', step: 'ONE_DAY', period: 'TWO_YEARS', outside_rth: false });
+    }).then(function (r) {
+      if (!r || !r.time) return;
+      watchCache[w.conid] = r.time.map(function (t, i) { return { date: String(t).slice(0, 10), p: Number(r.close[i]) }; }).filter(function (x) { return ok(x.p); });
+      if (state.m) renderAssets(state.m);
+    }).catch(function () { toast('Не вдалося взяти ціни ' + w.sym + ' з IBKR'); })
+      .then(function () { watchLoading[w.conid] = false; });
+  }
+  $('watchForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var q = $('watchQ').value.trim(), ul = $('watchRes'), B = window.PortfelBuy;
+    if (!q || !B) return;
+    ul.replaceChildren(h('li', { class: 'note', text: 'Шукаю…' }));
+    B.read('search_contracts', { query: q }).then(function (r) {
+      var list = ((r && r.results) || []).filter(function (x) {
+        return x && x.underlying_contract_id && x.country_code === 'US' && (x.sections || []).some(function (s) { return s.security_type === 'STK'; });
+      }).slice(0, 6);
+      ul.replaceChildren();
+      if (!list.length) { ul.append(h('li', { class: 'note', text: 'На американських біржах нічого не знайшлося.' })); return; }
+      list.forEach(function (x) {
+        ul.append(h('li', null, h('button', { type: 'button', class: 'watch-pick', onclick: function () {
+          var wl = watchList().filter(function (w) { return w.conid !== x.underlying_contract_id; });
+          wl.push({ sym: x.symbol, conid: x.underlying_contract_id, name: x.description || x.symbol });
+          watchSave(wl); ul.replaceChildren(); $('watchQ').value = '';
+          renderAssets(state.m);
+        } }, h('b', { text: x.symbol }), ' ', h('span', { text: x.description || '' }))));
+      });
+    }).catch(function () { ul.replaceChildren(h('li', { class: 'note', text: 'IBKR зараз не відповідає.' })); });
+  });
+
+  // Аналіз у форматі Матриці: Claude отримує ціни з IBKR і пише картку
+  var anCtrl = null;
+  $('analysisClose').addEventListener('click', function () { if (anCtrl) anCtrl.abort(); $('analysis').hidden = true; });
+  function analyze(sym, name, pts) {
+    var box = $('analysis'), body = $('analysisBody');
+    $('analysisTitle').textContent = 'Аналіз ' + sym + (name && name !== sym ? ', ' + name : '');
+    body.textContent = 'Claude думає…';
+    $('analysisNote').textContent = '';
+    box.hidden = false;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (!window.claude || !window.claude.use) { body.textContent = 'Аналіз працює лише в Claude.'; return; }
+    var first = pts[0], last = pts[pts.length - 1];
+    var hi = Math.max.apply(null, pts.map(function (x) { return x.p; })), lo = Math.min.apply(null, pts.map(function (x) { return x.p; }));
+    var prompt = 'Ти аналітик акцій і оцінюєш компанію за логікою «Матриці» Тараса Гука. Пиши українською, коротко, без довгого тире, звичайним текстом без таблиць Markdown.\n\n' +
+      'Папір: ' + sym + ' (' + name + ').\nЦіни з IBKR: зараз ' + last.p.toFixed(2) + ' (' + last.date + '), на ' + first.date + ' було ' + first.p.toFixed(2) +
+      ', максимум за період ' + hi.toFixed(2) + ', мінімум ' + lo.toFixed(2) + '.\n\n' +
+      'Структура відповіді:\n1. Рядок вердикту: «' + sym + ': ВЕРДИКТ · слово ціни · рівень A–E» або «поза матрицею (ворота 0)».\n' +
+      '2. Ворота 0: чи результат визначає якість бізнесу, а не цикл галузі чи біржова ціна продукту. Для фондів (ETF) оцінюй склад і витрати фонду замість ознак компанії.\n' +
+      '3. Десять ознак якості: по рядку «ознака: бал з 10, чому». Разом бал зі 100; рівень A від 80, B від 70, C від 55, D і E нижче.\n4. Ред флаги.\n' +
+      '5. Слово ціни (дешево / справедлива / дорого, але росте / дорого без росту / пастка дешевизни) і чому.\n6. Вердикт: STRONG BUY, BUY, BUY WAIT, AVOID або СПЕКУЛЯЦІЯ.\n' +
+      '7. Арифметика х2: що має статися з прибутком і мультиплікатором для подвоєння.\n8. Три ризики.\n\n' +
+      'Важливо: свіжих звітів і новин у тебе немає, ти знаєш дані лише до своєї дати навчання. Позначай кожну фінансову цифру «(до ' + 'дати навчання, перевір)», не вигадуй точних чисел, яких не знаєш, і в кінці одним рядком напиши, що це не інвестиційна порада.';
+    anCtrl = new AbortController();
+    window.claude.use('sample').then(function (sample) {
+      if (!sample) { body.textContent = 'Тут Claude недоступний для аналізу. Попроси його в чаті: «дай аналіз ' + sym + ' в стилі Матриці».'; return; }
+      return sample(prompt, { modelTier: 'complex', cache: false, signal: anCtrl.signal, onText: function (u) { body.textContent = u.text || 'Claude думає…'; } })
+        .then(function (r) { body.textContent = r.text; $('analysisNote').textContent = 'Ціни з IBKR на сьогодні; фінансові показники з пам\'яті моделі, тож можуть бути застарілими. Для аналізу зі свіжими звітами попроси мене в чаті.'; });
+    }).catch(function (e) {
+      if (e && e.code === 'not_granted') body.textContent = 'Аналіз потребує дозволу сторінці питати Claude. Дозволь і натисни «Аналіз» ще раз.';
+      else if (e && e.name === 'AbortError') return;
+      else body.textContent = 'Не вдалося отримати аналіз' + (e && e.code ? ' (' + e.code + ')' : '') + '. Спробуй ще раз або попроси мене в чаті.';
+    });
   }
   function pxText(v, cur) { return cur && cur !== 'USD' ? nf2.format(v) + ' ' + cur : usd(v); }
   function setSub(c, p) {

@@ -792,3 +792,19 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .trade-mark:hover .pt, .trade-mark:focus .pt { stroke: var(--ink); }
 .mini-legend { display: inline-flex; gap: 14px; font-size: 12px; color: var(--muted); }
 .mini-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+/* Спостереження й аналіз */
+.watch-add { position: relative; display: flex; flex-wrap: wrap; gap: 8px; }
+.watch-add input { flex: 1 1 14rem; min-width: 0; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--paper); font-size: 15px; }
+.watch-res { list-style: none; margin: 0; padding: 0; flex-basis: 100%; display: grid; }
+.watch-pick { width: 100%; text-align: left; padding: 8px 6px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; }
+.watch-pick:hover { background: var(--accent-soft); }
+.watch-pick span { color: var(--ink-2); font-size: 14px; }
+.mini.watch { background: var(--paper-2); }
+.mini-acts { display: flex; gap: 14px; font-size: 12.5px; }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-weight: 500; }
+.linkish:hover { text-decoration: underline; }
+.analysis { margin-top: 14px; padding: 16px 18px; border-radius: 14px; background: var(--paper); display: grid; gap: 10px; }
+.analysis-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.analysis-head h3 { font-size: 17px; }
+.analysis-body { white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }

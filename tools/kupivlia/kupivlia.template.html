@@ -896,7 +896,8 @@ a { color: var(--accent); }
     account: async function (fresh) {
       return { pos: pl(await read('get_account_positions', {}, fresh)), sum: pl(await read('get_account_summary', {}, fresh)) };
     },
-    reload: function () { S.prices = {}; return loadAccount(true); }
+    reload: function () { S.prices = {}; return loadAccount(true); },
+    read: async function (tool, input) { return pl(await read(tool, input || {})); }
   };
 
   (async function boot() {

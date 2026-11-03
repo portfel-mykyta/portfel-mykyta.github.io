@@ -222,7 +222,17 @@
         </div>
         <div class="chips" id="aPeriods" role="radiogroup" aria-label="Період"></div>
       </div>
+      <form class="watch-add" id="watchForm" role="search" hidden>
+        <input id="watchQ" type="search" placeholder="Додати папір для аналізу: KO, NVDA, QQQ…" autocomplete="off" aria-label="Тікер або назва">
+        <button class="btn ghost" type="submit">Знайти</button>
+        <ul class="watch-res" id="watchRes"></ul>
+      </form>
       <div class="mini-grid" id="miniGrid"></div>
+      <section class="analysis" id="analysis" hidden aria-live="polite">
+        <div class="analysis-head"><h3 id="analysisTitle"></h3><button class="icon-btn" id="analysisClose" type="button" aria-label="Закрити аналіз" title="Закрити">×</button></div>
+        <div class="analysis-body" id="analysisBody"></div>
+        <p class="note" id="analysisNote"></p>
+      </section>
     </section>
 
     <section class="panel growth" id="growth" aria-labelledby="growthTitle">
