@@ -817,3 +817,13 @@ h2 { font-size: 19px; letter-spacing: -.01em; font-variation-settings: 'SHRP' 60
 .mini-chart { height: 112px; }
 .mini-axis { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .mini-grid-l { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+
+/* Згортання блоків */
+.fold-btn { margin-left: auto; flex: none; }
+.fold-btn .ic { transition: transform .2s; }
+.collapsed .fold-btn .ic { transform: rotate(-90deg); }
+.panel.collapsed > :not(.panel-head), .facts.collapsed > :not(.panel-head) { display: none !important; }
+.panel.collapsed { gap: 0; }
+.fold-head { display: flex; align-items: center; gap: 12px; }
+@media (prefers-reduced-motion: reduce) { .fold-btn .ic { transition: none; } }
+.collapsed { align-self: start !important; }

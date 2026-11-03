@@ -51,7 +51,7 @@
     'BRK.B': 'fin', JPM: 'fin', V: 'fin', MA: 'fin', BAC: 'fin',
     LLY: 'health', JNJ: 'health', ABBV: 'health', UNH: 'health', HIMS: 'health',
     WMT: 'staples', COST: 'staples', KO: 'staples', PG: 'staples',
-    XOM: 'energy', CVX: 'energy', ZIM: 'ind', LMT: 'ind', RTX: 'ind', NOC: 'ind', GD: 'ind'
+    XOM: 'energy', CVX: 'energy', ZIM: 'ind', UBER: 'ind', LMT: 'ind', RTX: 'ind', NOC: 'ind', GD: 'ind'
   };
   var WEIGHTS_NOTE = 'Частки компаній у S&P 500: Slickcharts, 27 жовтня 2026. Сектори: оцінка ChartRow за складом фонду SPY, 26 жовтня 2026.';
   // Фонди, що повторюють S&P 500 (через них ти теж володієш Apple, Tesla тощо), і фонди облігацій
@@ -64,7 +64,7 @@
     WMT: 'Walmart', XOM: 'ExxonMobil', JNJ: 'Johnson & Johnson', NFLX: 'Netflix', PLTR: 'Palantir',
     HIMS: 'Hims & Hers', ZIM: 'ZIM', INTC: 'Intel', COST: 'Costco', PG: 'Procter & Gamble',
     UNH: 'UnitedHealth', BAC: 'Bank of America', CVX: 'Chevron', CSCO: 'Cisco', MU: 'Micron',
-    ABBV: 'AbbVie', LMT: 'Lockheed Martin', RTX: 'RTX', NOC: 'Northrop Grumman', GD: 'General Dynamics'
+    ABBV: 'AbbVie', UBER: 'Uber', LMT: 'Lockheed Martin', RTX: 'RTX', NOC: 'Northrop Grumman', GD: 'General Dynamics'
   };
   var ABOUT = {
     VOO: 'Фонд: 500 найбільших компаній США',
@@ -540,6 +540,7 @@
     renderAssets(m);
     renderOps(m);
     renderAbout(m);
+    setupFolds();
     drawGuilloche(document.querySelector('[data-guilloche="hero"]'), 'hero');
   }
 
@@ -1582,6 +1583,40 @@
     }
     var allDates = Object.keys(dates).sort();
     requestAnimationFrame(function () { cards.forEach(function (c) { drawMini(c, cards, allDates); }); });
+  }
+
+  /* ---------- Згортання великих блоків; стан пам'ятається на пристрої ---------- */
+  var FOLDABLE = ['market', 'holdings', 'facts', 'inside', 'deposit', 'plan', 'buy', 'assets', 'growth'];
+  function foldState() { try { return JSON.parse(store.get('portfel.folds') || '{}') || {}; } catch (e) { return {}; } }
+  function setupFolds() {
+    var st = foldState();
+    FOLDABLE.forEach(function (id) {
+      var sec = $(id);
+      if (!sec) return;
+      var head = sec.querySelector(':scope > .panel-head') || sec.querySelector(':scope > h2');
+      if (!head) return;
+      var title = (sec.querySelector('h2') || {}).textContent || '';
+      var btn = head.querySelector(':scope > .fold-btn');
+      if (!btn) {
+        btn = h('button', { class: 'icon-btn fold-btn', type: 'button' }, icon('i-chev'));
+        btn.addEventListener('click', function () {
+          var s2 = foldState();
+          s2[id] = !sec.classList.contains('collapsed');
+          store.set('portfel.folds', JSON.stringify(s2));
+          applyFold(sec, btn, s2[id], title);
+          if (!s2[id]) { if (state.m) { if (id === 'assets') renderAssets(state.m); if (id === 'growth') renderGrowth(state.m); } }
+        });
+        if (head.tagName === 'H2') { var wrap = h('div', { class: 'panel-head fold-head' }); head.replaceWith(wrap); wrap.append(head, btn); head = wrap; }
+        else head.append(btn);
+      }
+      applyFold(sec, btn, !!st[id], title);
+    });
+  }
+  function applyFold(sec, btn, collapsed, title) {
+    sec.classList.toggle('collapsed', collapsed);
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.setAttribute('aria-label', (collapsed ? 'Розгорнути: ' : 'Згорнути: ') + title);
+    btn.title = collapsed ? 'Розгорнути' : 'Згорнути';
   }
 
   /* ---------- Спостереження й аналіз (лише в Claude) ---------- */
