@@ -51,7 +51,7 @@
     'BRK.B': 'fin', JPM: 'fin', V: 'fin', MA: 'fin', BAC: 'fin',
     LLY: 'health', JNJ: 'health', ABBV: 'health', UNH: 'health', HIMS: 'health',
     WMT: 'staples', COST: 'staples', KO: 'staples', PG: 'staples',
-    XOM: 'energy', CVX: 'energy', ZIM: 'ind', UBER: 'ind', LMT: 'ind', RTX: 'ind', NOC: 'ind', GD: 'ind'
+    XOM: 'energy', CVX: 'energy', ZIM: 'ind', MANU: 'comm', UBER: 'ind', LMT: 'ind', RTX: 'ind', NOC: 'ind', GD: 'ind'
   };
   var WEIGHTS_NOTE = 'Частки компаній у S&P 500: Slickcharts, 27 жовтня 2026. Сектори: оцінка ChartRow за складом фонду SPY, 26 жовтня 2026.';
   // Фонди, що повторюють S&P 500 (через них ти теж володієш Apple, Tesla тощо), і фонди облігацій
@@ -62,7 +62,7 @@
     GOOG: 'Alphabet', META: 'Meta', AVGO: 'Broadcom', 'BRK.B': 'Berkshire Hathaway', LLY: 'Eli Lilly',
     KO: 'Coca-Cola', ORCL: 'Oracle', AMD: 'AMD', JPM: 'JPMorgan', V: 'Visa', MA: 'Mastercard',
     WMT: 'Walmart', XOM: 'ExxonMobil', JNJ: 'Johnson & Johnson', NFLX: 'Netflix', PLTR: 'Palantir',
-    HIMS: 'Hims & Hers', ZIM: 'ZIM', INTC: 'Intel', COST: 'Costco', PG: 'Procter & Gamble',
+    HIMS: 'Hims & Hers', ZIM: 'ZIM', MANU: 'Manchester United', INTC: 'Intel', COST: 'Costco', PG: 'Procter & Gamble',
     UNH: 'UnitedHealth', BAC: 'Bank of America', CVX: 'Chevron', CSCO: 'Cisco', MU: 'Micron',
     ABBV: 'AbbVie', UBER: 'Uber', LMT: 'Lockheed Martin', RTX: 'RTX', NOC: 'Northrop Grumman', GD: 'General Dynamics'
   };
