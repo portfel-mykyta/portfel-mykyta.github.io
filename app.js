@@ -1977,7 +1977,28 @@
     btn.setAttribute('aria-expanded', String(!collapsed));
     btn.setAttribute('aria-label', (collapsed ? 'Розгорнути: ' : 'Згорнути: ') + title);
     btn.title = collapsed ? 'Розгорнути' : 'Згорнути';
+    layoutPairs();
   }
+  // Половинні блоки стоять парами. Якщо пари немає (сусіда згорнуто чи пересунуто), блок займає всю ширину,
+  // а згорнутий блок стає тонкою смугою на всю ширину, щоб поруч не лишалось порожнього місця.
+  function layoutPairs() {
+    var main = $('main'); if (!main) return;
+    var wide = window.matchMedia('(min-width: 1100px)').matches, mid = window.matchMedia('(min-width: 900px)').matches;
+    var HALF = wide ? { holdings: 7, facts: 5, ops: 7, learn: 5 } : mid ? { ops: 6, learn: 6 } : {};
+    var pending = null;
+    var fin = function (el, cls) { el.classList.remove('solo', 'p6'); if (cls) el.classList.add(cls); };
+    Array.prototype.forEach.call(main.children, function (el) {
+      if (el.tagName !== 'SECTION' || el.hidden) return;
+      var half = HALF[el.id] && !el.classList.contains('collapsed');
+      if (!half) { fin(el, HALF[el.id] ? 'solo' : null); if (pending) { fin(pending, 'solo'); pending = null; } return; }
+      if (!pending) { pending = el; return; }
+      var even = HALF[pending.id] + HALF[el.id] !== 12;
+      fin(pending, even ? 'p6' : null); fin(el, even ? 'p6' : null);
+      pending = null;
+    });
+    if (pending) fin(pending, 'solo');
+  }
+  window.addEventListener('resize', function () { layoutPairs(); });
 
   /* ---------- Спостереження й аналіз (лише в Claude) ---------- */
   var watchCache = {}, watchLoading = {};
