@@ -538,6 +538,7 @@
     renderPlan(m);
     renderGrowth(m);
     renderAssets(m);
+    renderDivs(m);
     renderOps(m);
     renderAbout(m);
     setupFolds();
@@ -1161,6 +1162,133 @@
   }
 
 
+  /* ---------- Дивіденди: коли, скільки, від кого і куди пішли ---------- */
+  // Фонди, що не виплачують дивіденди, а вкладають їх назад у себе (накопичувальні, Acc)
+  var ACC_FUNDS = { VUAA: 1, CSPX: 1, SXR8: 1, IB01: 1, VWRA: 1, IWDA: 1, EQAC: 1, CNDX: 1, IBTA: 1, CBU0: 1 };
+  // Виплата = дивіденд і податок з нього в один день по одному паперу
+  function divPayments(m) {
+    var g = {};
+    m.cashTx.forEach(function (c) {
+      if ((c.type !== 'dividend' && c.type !== 'tax') || !c.sym) return;
+      var k = c.sym + '|' + c.d;
+      var p = g[k] || (g[k] = { sym: c.sym, d: c.d, gross: 0, tax: 0, per: null });
+      if (c.type === 'dividend') {
+        p.gross += c.amount;
+        var mm = /DIVIDEND\s+([A-Z]{3})\s+([\d.]+)\s+PER SHARE/i.exec(c.desc || '');
+        if (mm) p.per = { cur: mm[1], v: Number(mm[2]) };
+      } else p.tax += c.amount;
+    });
+    return Object.keys(g).map(function (k) { var p = g[k]; p.net = p.gross + p.tax; return p; })
+      .filter(function (p) { return Math.abs(p.gross) >= 0.005 || Math.abs(p.tax) >= 0.005; })
+      .sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+  }
+  // Куди пішли гроші: готівка на рахунку витрачається в порядку надходження (перші прийшли, перші пішли)
+  function divFlow(m, pays) {
+    var ev = [];
+    m.cashTx.forEach(function (c) {
+      if (c.type === 'dividend' || (c.type === 'tax' && c.sym)) return;
+      if (Math.abs(c.amount) < 0.005) return;
+      ev.push({ d: c.d, amt: c.amount, src: c.type });
+    });
+    pays.forEach(function (p) { if (p.net > 0.004) ev.push({ d: p.d, amt: p.net, src: 'div', pay: p }); });
+    m.trades.forEach(function (t) {
+      if (t.kind === 'CASH' || !ok(t.amount) || Math.abs(t.amount) < 0.005) return;
+      ev.push({ d: t.d, amt: t.amount, src: t.side === 'BUY' ? 'buy' : 'sell', sym: t.sym });
+    });
+    ev.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : (b.amt > 0) - (a.amt > 0); });
+    var q = [];
+    ev.forEach(function (e) {
+      if (e.amt > 0) { var lot = { rem: e.amt, pay: e.pay || null }; if (e.pay) { e.pay.uses = []; e.pay.lot = lot; } q.push(lot); return; }
+      var need = -e.amt;
+      while (need > 1e-9 && q.length) {
+        var l = q[0], take = Math.min(l.rem, need);
+        l.rem -= take; need -= take;
+        if (l.pay && take > 1e-9) l.pay.uses.push({ d: e.d, sym: e.src === 'buy' ? e.sym : null, what: e.src, amt: take });
+        if (l.rem <= 1e-9) q.shift();
+      }
+    });
+    pays.forEach(function (p) { p.left = p.lot ? p.lot.rem : 0; if (!p.uses) p.uses = []; });
+  }
+  function divWhatText(u) {
+    if (u.sym) return NAMES[u.sym] || u.sym;
+    return { fee: 'плата брокеру', tax: 'податок', withdrawal: 'виведення', interest: 'відсотки' }[u.what] || 'інші списання';
+  }
+  function renderDivs(m) {
+    var sec = $('divs');
+    var pays = divPayments(m);
+    var held = m.rows.filter(function (r) { return r.value > 0.005; });
+    sec.hidden = !pays.length && !held.length;
+    if (sec.hidden) return;
+    divFlow(m, pays);
+    var gross = sum(pays, function (p) { return p.gross; }), tax = sum(pays, function (p) { return p.tax; }), net = gross + tax;
+    var yr = pays.filter(function (p) { return p.d.slice(0, 4) === m.year; });
+    $('divsMeta').textContent = pays.length ? pays.length + ' ' + plural(pays.length, ['виплата', 'виплати', 'виплат']) + ' з ' + dayLongY(pays[0].d) : 'Виплат ще не було';
+    var kpi = function (label, val, cls, hint) { return h('div', { class: 'div-kpi', title: hint || '' }, h('small', { text: label }), h('b', { class: cls || '', text: val })); };
+    $('divKpis').replaceChildren(
+      kpi('Нараховано', usd(gross), '', 'Дивіденди до податку'),
+      kpi('Податок США', usd(tax), tax < -0.004 ? 'down-t' : '', 'Утримано при виплаті. Для США з формою W-8BEN це 15%'),
+      kpi('Прийшло на рахунок', usd(net), 'up-t'),
+      kpi('Цього року', usd(sum(yr, function (p) { return p.net; })), '', 'Після податку США, з 1 січня'));
+    // Від кого
+    var by = {};
+    pays.forEach(function (p) {
+      var b = by[p.sym] || (by[p.sym] = { sym: p.sym, gross: 0, net: 0, n: 0, last: p.d });
+      b.gross += p.gross; b.net += p.net; b.n++; if (p.d > b.last) b.last = p.d;
+    });
+    var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.net - a.net; });
+    var maxNet = list.length ? list[0].net : 1;
+    $('divFrom').replaceChildren.apply($('divFrom'), list.map(function (b) {
+      var bar = h('span', { class: 'div-bar' }, h('i'));
+      bar.firstChild.style.width = Math.max(3, b.net / (maxNet || 1) * 100).toFixed(1) + '%';
+      bar.firstChild.style.background = colorOf(m.slot[b.sym] || slotFor(m, b.sym));
+      var still = held.some(function (r) { return r.sym === b.sym; });
+      return h('div', { class: 'div-from-row' },
+        h('span', { class: 'div-who' }, h('b', { text: NAMES[b.sym] || b.sym }), h('small', { text: b.n + ' ' + plural(b.n, ['виплата', 'виплати', 'виплат']) + ', остання ' + dayShort(b.last) + (still ? '' : ', уже продано') })),
+        bar, money(usd(b.net)));
+    }));
+    if (!list.length) $('divFrom').replaceChildren(h('p', { class: 'note', text: 'Дивідендів на рахунок ще не надходило.' }));
+    // Куди пішли
+    var where = {}, left = 0;
+    pays.forEach(function (p) {
+      left += p.left;
+      p.uses.forEach(function (u) { var k = u.sym || '~' + divWhatText(u); where[k] = (where[k] || 0) + u.amt; });
+    });
+    var wl = Object.keys(where).map(function (k) { return [k, where[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
+    if (left > 0.004) wl.push(['', left]);
+    var wsum = sum(wl, function (x) { return x[1]; }) || 1;
+    var stack = h('div', { class: 'div-stack', role: 'img', 'aria-label': 'Куди пішли дивіденди' });
+    var legend = h('ul', { class: 'div-legend' });
+    wl.forEach(function (x) {
+      var label = !x[0] ? 'Ще лежать готівкою на рахунку' : x[0][0] === '~' ? x[0].slice(1) : 'На купівлю ' + (NAMES[x[0]] || x[0]);
+      var col = !x[0] || x[0][0] === '~' ? 'var(--muted)' : colorOf(m.slot[x[0]] || slotFor(m, x[0]));
+      var seg = h('i', { title: label + ': ' + usd(x[1]) }); seg.style.width = (x[1] / wsum * 100).toFixed(2) + '%'; seg.style.background = col;
+      stack.append(seg);
+      var dot = h('span', { class: 'dot' }); dot.style.background = col;
+      legend.append(h('li', null, dot, h('span', { text: label }), money(usd(x[1]))));
+    });
+    $('divWhere').replaceChildren(wl.length ? stack : '', legend,
+      h('p', { class: 'note', text: 'Дивіденди падають на рахунок як звичайні гроші й змішуються з поповненнями. Тут вважаємо, що гроші витрачаються в тому порядку, в якому прийшли: найстаріші першими. Це домовленість для наочності: окремого запису «куди пішов дивіденд» у брокера немає.' }));
+    // Кожна виплата, нові зверху
+    var rows = pays.slice().reverse().map(function (p) {
+      var per = p.per ? (p.per.cur === 'USD' ? '$' + p.per.v : p.per.v + ' ' + p.per.cur) + ' на акцію' : '';
+      var to = p.uses.filter(function (u) { return u.amt >= 0.005; }).map(function (u) { return divWhatText(u) + ' ' + dayShort(u.d); });
+      if (p.left > 0.004) to.push('ще на рахунку ' + usd(p.left));
+      return h('div', { class: 'div-row' },
+        h('span', { class: 'div-date', text: dayShort(p.d) + ' ' + String(d(p.d).getUTCFullYear()).slice(2) }),
+        h('span', { class: 'div-who' }, h('b', { text: NAMES[p.sym] || p.sym }), h('small', { text: [per, to.length ? 'куди: ' + to.join(', ') : ''].filter(Boolean).join(' · ') })),
+        h('span', { class: 'ops-side' }, money(usd(p.net)), Math.abs(p.tax) >= 0.005 ? h('small', null, money(usd(p.gross) + ' − податок ' + usd(Math.abs(p.tax)))) : null));
+    });
+    $('divList').replaceChildren.apply($('divList'), rows);
+    // Хто з того, що є, не платить
+    var quiet = held.filter(function (r) { return !by[r.sym]; }).map(function (r) {
+      var why = ACC_FUNDS[r.sym] ? 'накопичувальний фонд: дивіденди компаній він вкладає назад у себе, тож вони вже в ціні частки, а податку США з них ти не платиш окремо'
+        : 'поки ти ним володієш, виплат не було';
+      return h('li', null, h('b', { text: (NAMES[r.sym] || r.title || r.sym) + ': ' }), why);
+    });
+    $('divQuiet').replaceChildren(quiet.length ? h('h3', { class: 'div-h', text: 'Що з твого не виплачує' }) : '', quiet.length ? h('ul', { class: 'div-q' }, quiet) : '');
+    $('divNote').textContent = 'Податок США береться одразу при виплаті. В Україні з іноземних дивідендів треба ще задекларувати 9% ПДФО і 5% військового збору; податок США можна зарахувати лише з офіційним підтвердженням. Я не податковий консультант, деталі краще звірити з бухгалтером.';
+  }
+
   /* ---------- Поповнення: IBKR → TransferGo → заявки ---------- */
   // Реквізити й стан переказу лежать лише на цьому пристрої. Гроші переказує і підтверджує власник.
   var TRANSFERGO_URL = 'https://www.transfergo.com/';
@@ -1710,6 +1838,10 @@
         })));
       }
       if (cardShow('div') && ok(dy) && dy > 0) box.append(h('span', { class: 'mini-note', text: 'Дивіденди ' + nf1.format(dy) + '% на рік' }));
+      if (cardShow('div') && m) {
+        var got = divPayments(m).filter(function (p) { return p.sym === k; });
+        if (got.length) box.append(h('span', { class: 'mini-note', text: 'Тобі виплатили ' + usd(sum(got, function (p) { return p.net; })) + ' за ' + got.length + ' ' + plural(got.length, ['раз', 'рази', 'разів']) + ', остання виплата ' + dayShort(got[got.length - 1].d) }));
+      }
     };
     fill(statCache[conid] && statCache[conid].v);
     var B = window.PortfelBuy;
@@ -1741,7 +1873,7 @@
   }
 
   /* ---------- Згортання великих блоків; стан пам'ятається на пристрої ---------- */
-  var FOLDABLE = ['market', 'holdings', 'facts', 'inside', 'deposit', 'plan', 'buy', 'assets', 'growth'];
+  var FOLDABLE = ['market', 'holdings', 'facts', 'inside', 'deposit', 'plan', 'buy', 'assets', 'divs', 'growth'];
   function foldState() { try { return JSON.parse(store.get('portfel.folds') || '{}') || {}; } catch (e) { return {}; } }
   function orderSave() {
     var ids = Array.prototype.map.call(document.querySelectorAll('#main > section'), function (el) { return el.id; })
