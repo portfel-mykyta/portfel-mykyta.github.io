@@ -1219,6 +1219,12 @@
     var held = m.rows.filter(function (r) { return r.value > 0.005; });
     sec.hidden = !pays.length && !held.length;
     if (sec.hidden) return;
+    // DRIP: брокер сам купує той самий папір на суму дивіденду в день виплати або за кілька днів
+    pays.forEach(function (p) {
+      p.drip = m.trades.filter(function (t) {
+        return t.side === 'BUY' && t.sym === p.sym && t.d >= p.d && daysBetween(p.d, t.d) <= 5 && ok(t.amount) && Math.abs(Math.abs(t.amount) - p.net) <= Math.max(0.02, p.net * 0.05);
+      })[0] || null;
+    });
     divFlow(m, pays);
     var gross = sum(pays, function (p) { return p.gross; }), tax = sum(pays, function (p) { return p.tax; }), net = gross + tax;
     var yr = pays.filter(function (p) { return p.d.slice(0, 4) === m.year; });
@@ -1259,15 +1265,20 @@
     var stack = h('div', { class: 'div-stack', role: 'img', 'aria-label': 'Куди пішли дивіденди' });
     var legend = h('ul', { class: 'div-legend' });
     wl.forEach(function (x) {
-      var label = !x[0] ? 'Ще лежать готівкою на рахунку' : x[0][0] === '~' ? x[0].slice(1) : 'На купівлю ' + (NAMES[x[0]] || x[0]);
+      var label = !x[0] ? 'Ще лежать готівкою на рахунку' : x[0][0] === '~' ? x[0].slice(1) : 'У покупці ' + (NAMES[x[0]] || x[0]);
       var col = !x[0] || x[0][0] === '~' ? 'var(--muted)' : colorOf(m.slot[x[0]] || slotFor(m, x[0]));
       var seg = h('i', { title: label + ': ' + usd(x[1]) }); seg.style.width = (x[1] / wsum * 100).toFixed(2) + '%'; seg.style.background = col;
       stack.append(seg);
       var dot = h('span', { class: 'dot' }); dot.style.background = col;
       legend.append(h('li', null, dot, h('span', { text: label }), money(usd(x[1]))));
     });
+    var dripN = pays.filter(function (p) { return p.drip; }).length;
+    var lastPay = pays[pays.length - 1];
+    var dripTxt = !pays.length ? '' : dripN && lastPay.drip ? 'Автоматичне реінвестування (DRIP) увімкнене: брокер сам купує той самий папір на суму дивіденду.'
+      : dripN ? 'Раніше дивіденди реінвестувались автоматично (DRIP), але остання виплата лишилась готівкою. Якщо ти щойно ввімкнув DRIP, наступна виплата це покаже.'
+      : 'Автоматичне реінвестування (DRIP) поки не спрацьовувало: жоден дивіденд не купив той самий папір сам. Якщо ти щойно його ввімкнув, це видно з наступної виплати.';
     $('divWhere').replaceChildren(wl.length ? stack : '', legend,
-      h('p', { class: 'note', text: 'Дивіденди падають на рахунок як звичайні гроші й змішуються з поповненнями. Тут вважаємо, що гроші витрачаються в тому порядку, в якому прийшли: найстаріші першими. Це домовленість для наочності: окремого запису «куди пішов дивіденд» у брокера немає.' }));
+      h('p', { class: 'note', text: dripTxt + ' Без DRIP дивіденд просто лягає на рахунок готівкою й змішується з поповненнями, тож брокер не записує, на що він пішов. Тут вважаємо, що першими витрачаються гроші, які прийшли раніше: це спосіб показати шлях грошей, а не дія брокера.' }));
     // Кожна виплата, нові зверху
     var rows = pays.slice().reverse().map(function (p) {
       var per = p.per ? (p.per.cur === 'USD' ? '$' + p.per.v : p.per.v + ' ' + p.per.cur) + ' на акцію' : '';
@@ -1275,7 +1286,7 @@
       if (p.left > 0.004) to.push('ще на рахунку ' + usd(p.left));
       return h('div', { class: 'div-row' },
         h('span', { class: 'div-date', text: dayShort(p.d) + ' ' + String(d(p.d).getUTCFullYear()).slice(2) }),
-        h('span', { class: 'div-who' }, h('b', { text: NAMES[p.sym] || p.sym }), h('small', { text: [per, to.length ? 'куди: ' + to.join(', ') : ''].filter(Boolean).join(' · ') })),
+        h('span', { class: 'div-who' }, h('b', { text: NAMES[p.sym] || p.sym }), h('small', { text: [per, p.drip ? 'реінвестовано автоматично (DRIP): ' + (NAMES[p.sym] || p.sym) + ' ' + dayShort(p.drip.d) : to.length ? 'потрапили в покупку: ' + to.join(', ') : ''].filter(Boolean).join(' · ') })),
         h('span', { class: 'ops-side' }, money(usd(p.net)), Math.abs(p.tax) >= 0.005 ? h('small', null, money(usd(p.gross) + ' − податок ' + usd(Math.abs(p.tax)))) : null));
     });
     $('divList').replaceChildren.apply($('divList'), rows);
