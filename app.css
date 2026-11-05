@@ -928,3 +928,4 @@ section.drop-after { box-shadow: 0 3px 0 var(--accent); }
 /* Блок без пари займає всю ширину; дві «широкі» половини діляться навпіл */
 .grid > .solo { grid-column: 1 / -1 !important; }
 .grid > .p6 { grid-column: span 6 !important; }
+#aMode.a-mode { display: inline-flex; width: fit-content; justify-self: start; align-self: start; margin: 0 0 10px; max-width: 100%; overflow-x: auto; }

@@ -1652,6 +1652,38 @@
     pts.forEach(function (x, i) { x.dp = i ? x.p / pts[i - 1].p - 1 : null; });
     return pts;
   }
+  // Скільки коштує твоя позиція в папері на кожному закритті (кількість × ціна)
+  function mineSeries(m, k, from) {
+    var pts = [], seen = false;
+    m.snaps.forEach(function (s) {
+      if (s.date < from) return;
+      var v = s.parts[k];
+      if (ok(v) && v > 0.004) seen = true;
+      if (!seen) return;
+      pts.push({ date: s.date, p: ok(v) ? v : 0, q: s.qty && s.qty[k] || 0 });
+    });
+    var row = m.rows.filter(function (r) { return r.sym === k; })[0];
+    if (m.data.live) {
+      var today = todayIso();
+      pts = pts.filter(function (x) { return x.date < today; });
+      if (row || pts.length) pts.push({ date: today, p: row ? row.value : 0, q: row ? row.qty : 0, live: true });
+    }
+    // Зміна за день без докупок і продажів: лише рух ціни
+    pts.forEach(function (x, i) {
+      var pr = pts[i - 1];
+      if (!pr || !(pr.p > 0.004)) { x.dp = null; return; }
+      var px = x.q ? x.p / x.q : null;
+      var flow = ok(px) ? (x.q - pr.q) * px : 0;
+      x.dp = (x.p - pr.p - flow) / pr.p;
+    });
+    return pts;
+  }
+  function cardMode() { return store.get('portfel.cardMode') === 'mine' ? 'mine' : 'price'; }
+  (function () {
+    var form = $('watchForm');
+    var box = h('div', { class: 'chips a-mode', id: 'aMode', role: 'radiogroup', 'aria-label': 'Що показують графіки' });
+    form.parentNode.insertBefore(box, form);
+  })();
   function renderAssets(m) {
     var sec = $('assets');
     var avail = growthPeriods(m);
@@ -1665,8 +1697,16 @@
       box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(p.id === pid), text: p.label,
         onclick: function () { store.set('portfel.aperiod', p.id); renderAssets(state.m); } }));
     });
+    var mode = cardMode();
+    var mbox = $('aMode');
+    mbox.replaceChildren();
+    [['price', 'Ціна однієї акції'], ['mine', 'Скільки в мене']].forEach(function (x) {
+      mbox.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(x[0] === mode), text: x[1],
+        onclick: function () { store.set('portfel.cardMode', x[0]); renderAssets(state.m); } }));
+    });
     var meta = $('assetsMeta');
-    meta.replaceChildren('Ринкова ціна однієї акції на кожному закритті. Наведи на графік: усі картки покажуть той самий день. ',
+    meta.replaceChildren(mode === 'mine' ? 'Скільки коштує твоя частка в кожному папері на кожному закритті: кількість × ціна. Наведи на графік: усі картки покажуть той самий день. '
+      : 'Ринкова ціна однієї акції на кожному закритті. Наведи на графік: усі картки покажуть той самий день. ',
       h('span', { class: 'mini-legend' }, h('span', null, h('i', { style: 'background:var(--up)' }), 'купівля'), h('span', null, h('i', { style: 'background:var(--down)' }), 'продаж')));
     var from = growthStart(pid, m);
     var keys = [];
@@ -1678,7 +1718,7 @@
     grid.classList.toggle('no-axes', !cardShow('axes'));
     var cards = [], dates = {};
     keys.forEach(function (k) {
-      var pts = priceSeries(m, k, from);
+      var pts = mode === 'mine' ? mineSeries(m, k, from) : priceSeries(m, k, from);
       if (pts.length < 2) return;
       pts.forEach(function (x) { dates[x.date] = 1; });
       var row = m.rows.filter(function (r) { return r.sym === k; })[0];
@@ -1687,12 +1727,12 @@
       var valEl = h('b', { class: 'mini-val' });
       var subEl = h('span', { class: 'mini-sub' });
       var ownEl = h('span', { class: 'mini-own', text: row ? 'у тебе ' + String(+Number(row.qty).toFixed(4)) + ' шт. на ' + usd(row.value) : 'продано, у тебе немає' });
-      var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': name + ': ціна однієї акції по днях' });
+      var chart = h('div', { class: 'mini-chart', tabindex: '0', role: 'img', 'aria-label': name + (mode === 'mine' ? ': вартість твоєї частки по днях' : ': ціна однієї акції по днях') });
       var dot = h('i', { class: 'pdot' }); dot.style.background = color;
       grid.append(h('article', { class: 'mini' + (row ? '' : ' sold') },
         h('header', { class: 'mini-head' }, h('span', { class: 'mini-name' }, dot, h('b', { text: name })), valEl),
         subEl, chart, cardStats(k, priceSeries(m, k, '0000'), row && row.conid, row, m), ownEl));
-      var c = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, cur: row && row.cur };
+      var c = { k: k, pts: pts, chart: chart, valEl: valEl, subEl: subEl, color: color, cur: mode === 'mine' ? null : row && row.cur, mine: mode === 'mine' };
       cards.push(c);
       setSub(c, null);
     });
@@ -2125,6 +2165,23 @@
   function pxText(v, cur) { return cur && cur !== 'USD' ? nf2.format(v) + ' ' + cur : usd(v); }
   function setSub(c, p) {
     c.subEl.replaceChildren();
+    if (c.mine) {
+      if (!p) {
+        var A = c.pts[0], B = c.pts[c.pts.length - 1];
+        // Скільки докуплено (мінус продано) між першою і останньою точкою
+        var flows = sum((state.m.trades || []).filter(function (t) { return t.sym === c.k && t.kind !== 'CASH' && t.d > A.date && t.d <= (B.live ? todayIso() : B.date) && ok(t.amount); }), function (t) { return -t.amount; });
+        var gain = B.p - A.p - flows;
+        c.valEl.textContent = usd(B.p);
+        var parts = [h('span', { class: gain >= 0.005 ? 'up-t' : gain <= -0.005 ? 'down-t' : '' }, usdS(gain)), ' заробіток на ціні за період'];
+        if (Math.abs(flows) >= 0.005) parts.push(', ' + (flows > 0 ? 'докуплено на ' : 'продано на ') + usd(Math.abs(flows)));
+        append(c.subEl, parts);
+        return;
+      }
+      c.valEl.textContent = usd(p.p);
+      var cl = p.dp == null ? '' : p.dp >= 0.0005 ? 'up-t' : p.dp <= -0.0005 ? 'down-t' : '';
+      append(c.subEl, [(p.live ? 'зараз' : dayLongY(p.date)) + ': ' + (p.q ? String(+Number(p.q).toFixed(4)) + ' шт.' : 'немає') + (p.dp == null ? '' : ', '), p.dp == null ? '' : h('span', { class: cl }, pctS(p.dp) + ' за день')]);
+      return;
+    }
     if (!p) {
       var a = c.pts[0].p, b = c.pts[c.pts.length - 1].p, ch = b / a - 1;
       c.valEl.textContent = pxText(b, c.cur);
@@ -2148,8 +2205,9 @@
     (state.m.trades || []).forEach(function (t) {
       if (t.sym !== c.k || t.kind === 'CASH' || !t.d || t.d < first || t.d > lastD || !ok(t.price)) return;
       (byDay[t.d + '|' + t.side] = byDay[t.d + '|' + t.side] || []).push(t);
-      lo = Math.min(lo, t.price); hi = Math.max(hi, t.price);
+      if (!c.mine) { lo = Math.min(lo, t.price); hi = Math.max(hi, t.price); }
     });
+    if (c.mine) lo = 0;   // вартість частки рахуємо від нуля, щоб докупки було видно як сходинки
     if (hi - lo < hi * 0.02) { lo -= hi * 0.01 + 0.01; hi += hi * 0.01 + 0.01; }
     var pad = 4, padB = 18, padR = 44;   // знизу дати, справа ціни
     var X = function (s) { return pad + (d(s).getTime() - t0) / (t1 - t0 || 1) * (W - pad - padR); };
@@ -2186,6 +2244,7 @@
       var pnl = sum(ts, function (t) { return t.pnl; });
       var avg = q ? amt / q : ts[0].price;
       var x = X(ts[0].d), y = Y(avg);
+      if (c.mine) { var at = c.pts.filter(function (p) { return p.date >= ts[0].d; })[0] || c.pts[c.pts.length - 1]; y = Y(at.p); }
       var g = sv('g', { class: 'trade-mark ' + (buy ? 'buy' : 'sell'), tabindex: '0' });
       g.append(sv('circle', { cx: x, cy: y, r: 11, class: 'hit' }), sv('circle', { cx: x, cy: y, r: 5, class: 'pt' }));
       var lines = function () {
@@ -2211,7 +2270,7 @@
       cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
       var p = c.pts.filter(function (q) { return q.date === date; })[0];
       if (p) { dotEl.setAttribute('cx', x); dotEl.setAttribute('cy', Y(p.p)); dotEl.setAttribute('visibility', 'visible'); setSub(c, p); }
-      else { dotEl.setAttribute('visibility', 'hidden'); c.valEl.replaceChildren('н/д'); c.subEl.replaceChildren(dayLong(date) + ': немає ціни'); }
+      else { dotEl.setAttribute('visibility', 'hidden'); c.valEl.replaceChildren(c.mine ? '$0.00' : 'н/д'); c.subEl.replaceChildren(dayLong(date) + (c.mine ? ': ще не було в тебе' : ': немає ціни')); }
     };
     function pick(clientX) {
       var r = box.getBoundingClientRect();
