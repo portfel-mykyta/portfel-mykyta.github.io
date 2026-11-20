@@ -1638,6 +1638,44 @@
 
   /* ---------- Кожен актив по днях: ринкова ціна однієї акції, спільний курсор ---------- */
   // Ціни з денного звіту (data.px, Yahoo); якщо їх немає, ціна = вартість частки / кількість
+  // Останній торговий день: у суботу й неділю жива ціна це закриття п'ятниці
+  function sessionIso() {
+    var t = todayIso(), wd = d(t).getUTCDay();
+    return wd === 6 ? iso(new Date(d(t).getTime() - 864e5)) : wd === 0 ? iso(new Date(d(t).getTime() - 2 * 864e5)) : t;
+  }
+  // Дні між останнім денним звітом і сьогодні: у Claude добираємо закриття з IBKR
+  var gapPx = {}, gapLoading = {};
+  function loadGap(m) {
+    var B = window.PortfelBuy;
+    if (!ART || !m.data.live || !B || !B.read || !m.snaps.length) return;
+    var last = m.snaps[m.snaps.length - 1].date, sess = sessionIso();
+    if (daysBetween(last, sess) < 2) return;
+    m.rows.forEach(function (r) {
+      if (!r.conid || gapPx[r.sym] || gapLoading[r.sym]) return;
+      gapLoading[r.sym] = true;
+      var use = function (list) {
+        gapPx[r.sym] = list.filter(function (x) { return x.date > last && x.date < sess && ok(x.p); });
+        if (state.m) renderAssets(state.m);
+      };
+      if (watchCache[r.conid]) { use(watchCache[r.conid]); return; }
+      B.ready.then(function (mcp) {
+        if (!mcp) return null;
+        return B.read('get_price_history', { contract_id: Number(r.conid), security_type: 'STK', step: 'ONE_DAY', period: 'TWO_YEARS', outside_rth: false });
+      }).then(function (res) {
+        if (!res || !res.time) return;
+        var list = res.time.map(function (t, i) { return { date: String(t).slice(0, 10), p: Number(res.close[i]) }; });
+        watchCache[r.conid] = list.filter(function (x) { return ok(x.p); });
+        use(list);
+      }).catch(function () { /* лишається як є */ });
+    });
+  }
+  function addGap(pts, k, from, q) {
+    var g = gapPx[k];
+    if (!g || !g.length) return pts;
+    var last = pts.length ? pts[pts.length - 1].date : from;
+    g.forEach(function (x) { if (x.date > last && x.date >= from) pts.push(q == null ? { date: x.date, p: x.p } : { date: x.date, p: x.p * q, q: q }); });
+    return pts;
+  }
   function priceSeries(m, k, from) {
     var px = (m.data.px || {})[k];
     var pts = [];
@@ -1645,8 +1683,8 @@
     else m.snaps.forEach(function (s) { var v = s.parts[k], q = s.qty && s.qty[k]; if (s.date >= from && ok(v) && q) pts.push({ date: s.date, p: v / q }); });
     var row = m.rows.filter(function (r) { return r.sym === k; })[0];
     if (m.data.live && row && ok(row.price)) {
-      var today = todayIso();
-      pts = pts.filter(function (x) { return x.date < today; });
+      var today = sessionIso();
+      pts = addGap(pts.filter(function (x) { return x.date < today; }), k, from, null);
       pts.push({ date: today, p: row.price, live: true });
     }
     pts.forEach(function (x, i) { x.dp = i ? x.p / pts[i - 1].p - 1 : null; });
@@ -1664,8 +1702,9 @@
     });
     var row = m.rows.filter(function (r) { return r.sym === k; })[0];
     if (m.data.live) {
-      var today = todayIso();
+      var today = sessionIso();
       pts = pts.filter(function (x) { return x.date < today; });
+      if (row) pts = addGap(pts, k, from, Number(row.qty));
       if (row || pts.length) pts.push({ date: today, p: row ? row.value : 0, q: row ? row.qty : 0, live: true });
     }
     // Зміна за день без докупок і продажів: лише рух ціни
@@ -1697,6 +1736,7 @@
       box.append(h('button', { type: 'button', role: 'radio', 'aria-checked': String(p.id === pid), text: p.label,
         onclick: function () { store.set('portfel.aperiod', p.id); renderAssets(state.m); } }));
     });
+    loadGap(m);
     var mode = cardMode();
     var mbox = $('aMode');
     mbox.replaceChildren();
