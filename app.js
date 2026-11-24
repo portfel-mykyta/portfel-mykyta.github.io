@@ -483,12 +483,44 @@
     if (!ART || !B) return Promise.resolve(false);
     return B.ready.then(function (mcp) {
       if (!mcp) return false;
-      return B.account(fresh).then(function (L) {
-        state.live = { pos: L.pos, sum: L.sum, at: Date.now() };
+      return Promise.all([B.account(fresh), loadPA(B, fresh)]).then(function (r) {
+        var L = r[0];
+        state.live = { pos: L.pos, sum: L.sum, at: Date.now(), pa: r[1] || (state.live && state.live.pa) || null };
         if (state.base) paint(overlay(state.base, state.live));
         return true;
       });
-    }).catch(function () { return false; });
+    }).catch(function () { return false; }).then(function (okLive) {
+      state.liveTried = true;
+      if (!okLive && state.m) safe(renderNotices, state.m);
+      return okLive;
+    });
+  }
+  // Щоденна вартість рахунку з PortfolioAnalyst IBKR. Разом з доходністю (TWR) вона дає і поповнення:
+  // поповнення за день = вартість сьогодні − вартість учора × (1 + доходність за день).
+  var paCache = null;
+  function loadPA(B, fresh) {
+    if (!B.read) return Promise.resolve(null);
+    if (paCache && !fresh && Date.now() - paCache.at < 30 * 60e3) return Promise.resolve(paCache.v);
+    return B.read('get_pa_performance_all_periods', {}).then(function (r) {
+      var acc = r && r.accounts && (r.accounts.account || r.accounts[Object.keys(r.accounts)[0]]);
+      var P = acc && acc.periods && (acc.periods['1Y'] || acc.periods.YTD || acc.periods['1M']);
+      if (!P || !P.dates || !P.nav || !P.cps) return null;
+      var rows = [];
+      for (var i = 0; i < P.dates.length; i++) {
+        var ds = String(P.dates[i]), dt = ds.slice(0, 4) + '-' + ds.slice(4, 6) + '-' + ds.slice(6, 8);
+        var nav = Number(P.nav[i]), c = Number(P.cps[i]);
+        if (!ok(nav) || !ok(c)) continue;
+        var flow = 0;
+        if (rows.length) {
+          var pr = rows[rows.length - 1];
+          var f = nav - pr.nav * (1 + c) / (1 + pr.c);
+          if (Math.abs(f) >= 0.5) flow = Math.round(f * 100) / 100;
+        }
+        rows.push({ date: dt, nav: nav, c: c, flow: flow });
+      }
+      paCache = { at: Date.now(), v: rows };
+      return rows;
+    }).catch(function () { return null; });
   }
   function overlay(data, L) {
     var d = Object.assign({}, data);
@@ -517,6 +549,22 @@
     // Поповнення після останнього денного звіту: приріст рахунку понад сьогоднішній заробіток.
     // Без цього нові гроші виглядали б як прибуток, доки звіт IBKR їх не покаже.
     var hist = data.history || [];
+    // Дні після денного звіту беремо з PortfolioAnalyst, з поповненнями окремо від заробітку
+    if (L.pa && L.pa.length && hist.length) {
+      var lastD = hist[hist.length - 1][0], today0 = todayIso();
+      var add = L.pa.filter(function (x) { return x.date > lastD && x.date < today0; });
+      if (add.length) {
+        // Поповнення в перший доданий день рахуємо від останнього рядка звіту
+        var prevPA = L.pa.filter(function (x) { return x.date <= lastD; }).pop();
+        hist = hist.concat(add.map(function (x, i) {
+          var flow = x.flow;
+          if (i === 0 && !prevPA) flow = 0;
+          return [x.date, x.nav, flow];
+        }));
+        d.history = hist;
+        d.live.paTo = add[add.length - 1].date;
+      }
+    }
     var last = hist.length ? hist[hist.length - 1] : null;
     if (last && ok(d.nav) && daysBetween(last[0], todayIso()) <= 4) {
       var flow = d.nav - last[1] - day;
@@ -525,22 +573,20 @@
     return d;
   }
 
+  // Відповіді IBKR приходять по одній: збираємо їх і перемальовуємо картки один раз
+  var reAssetsT = null;
+  function reAssets() {
+    clearTimeout(reAssetsT);
+    reAssetsT = setTimeout(function () { if (state.m) safe(renderAssets, state.m); }, 250);
+  }
+  // Помилка в одному блоці не ламає решту сторінки
+  function safe(fn, m) {
+    try { fn(m); } catch (e) { if (window.console) console.error('Портфель:', fn.name, e); }
+  }
   function renderAll() {
     var m = state.m;
-    renderFresh(m);
-    renderNotices(m);
-    renderHero(m);
-    renderMarket(m);
-    renderHoldings(m);
-    renderFacts(m);
-    renderInside(m);
-    renderDeposit(m);
-    renderPlan(m);
-    renderGrowth(m);
-    renderAssets(m);
-    renderDivs(m);
-    renderOps(m);
-    renderAbout(m);
+    [renderFresh, renderNotices, renderHero, renderMarket, renderHoldings, renderFacts, renderInside, renderDeposit,
+      renderPlan, renderGrowth, renderAssets, renderDivs, renderOps, renderAbout].forEach(function (fn) { safe(fn, m); });
     setupFolds();
     drawGuilloche(document.querySelector('[data-guilloche="hero"]'), 'hero');
   }
@@ -573,6 +619,13 @@
     if (m.data.source === 'snapshot' && !store.get(K.snap)) {
       box.append(notice('i-refresh', '', ['Це знімок рахунку на ' + dayLong(m.asOf) + '. Щоб цифри оновлювались самі щодня, налаштуй звіт IBKR: ',
         h('a', { href: README_URL, target: '_blank', rel: 'noopener', text: 'інструкція на 10 хвилин' }), '.'], K.snap));
+    } else if (ART) {
+      // У Claude дані беруться наживо з IBKR; GitHub тут ні до чого
+      if (!m.data.live && state.liveTried) {
+        box.append(notice('i-refresh', 'warn', ['Живі дані з IBKR не підтягнулись, тож зараз видно звіт на ' + dayLong(m.asOf) + '. Натисни ⟳ угорі; якщо не допоможе, перевір, що конектор Interactive Brokers у Claude увімкнений.']));
+      } else if (m.data.live && !m.data.live.paTo && daysBetween(m.asOf, todayIso()) > 4) {
+        box.append(notice('i-refresh', 'warn', ['Історія рахунку після ' + dayLong(m.asOf) + ' з IBKR не підтягнулась. Поповнення за ці дні можуть тимчасово виглядати як заробіток. Натисни ⟳ угорі.']));
+      }
     } else if (m.data.source !== 'snapshot' && age > 4 && !m.data.live) {
       box.append(notice('i-refresh', 'warn', ['Дані на ' + dayLong(m.asOf) + '. Схоже, щоденне оновлення зупинилось. ',
         h('a', { href: ACTIONS_URL, target: '_blank', rel: 'noopener', text: 'Перевір GitHub Actions' }), '.']));
@@ -1655,7 +1708,7 @@
       gapLoading[r.sym] = true;
       var use = function (list) {
         gapPx[r.sym] = list.filter(function (x) { return x.date > last && x.date < sess && ok(x.p); });
-        if (state.m) renderAssets(state.m);
+        reAssets();
       };
       if (watchCache[r.conid]) { use(watchCache[r.conid]); return; }
       B.ready.then(function (mcp) {
@@ -2041,7 +2094,7 @@
           sec.parentNode.insertBefore(dragSec, after ? sec.nextSibling : sec);
           orderSave();
           setupFolds();
-          if (state.m) renderAssets(state.m);
+          reAssets();
         });
         var tools = h('span', { class: 'block-tools' }, grip, up, down, btn);
         if (head.tagName === 'H2') { var wrap = h('div', { class: 'panel-head fold-head' }); head.replaceWith(wrap); wrap.append(head, tools); head = wrap; }
@@ -2094,7 +2147,7 @@
     }).then(function (r) {
       if (!r || !r.time) return;
       watchCache[w.conid] = r.time.map(function (t, i) { return { date: String(t).slice(0, 10), p: Number(r.close[i]) }; }).filter(function (x) { return ok(x.p); });
-      if (state.m) renderAssets(state.m);
+      reAssets();
     }).catch(function () { toast('Не вдалося взяти ціни ' + w.sym + ' з IBKR'); })
       .then(function () { watchLoading[w.conid] = false; });
   }
