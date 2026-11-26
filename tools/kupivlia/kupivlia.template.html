@@ -574,7 +574,10 @@ a { color: var(--accent); }
     var lim = null, qty = null;
     if (px && px.ref > 0) {
       lim = limitFor(px.ref, o.venue);
-      qty = qtyFor(o.amount, lim);
+      // IBKR резервує під заявку більше, ніж ціна × кількість: комісію (до 1%) і запас, особливо коли гроші в іншій валюті
+      // чи біржа закрита (на практиці до ~5%). Тож коли заявка забирає майже всі вільні гроші, лишаємо цей запас.
+      var room = S.acct && S.acct.cash > 0 ? S.acct.cash / 1.05 : Infinity;
+      qty = qtyFor(Math.min(o.amount, room), lim);
       if (qty < 0.0001) throw { code: 'small', message: 'Сума замала навіть для частки цього паперу.' };
       input.order_type = 'LIMIT'; input.limit_price = lim; input.quantity = qty;
     }
